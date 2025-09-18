@@ -22,6 +22,7 @@ import me.trihung.repository.ReservationRepository;
 import me.trihung.repository.ZoneRepository;
 import me.trihung.service.OrderService;
 import me.trihung.service.ReservationService;
+import me.trihung.util.IdGenerator;
 
 @Service
 public class ReservationServiceImpl implements ReservationService {
@@ -54,7 +55,12 @@ public class ReservationServiceImpl implements ReservationService {
 //			throw BadRequestException.message("Không đủ số lượng vé trong zone này");
 //		}
 		User owner = securityHelper.getCurrentUser();
+		
+		// Generate ID for the reservation
+		String reservationId = IdGenerator.generateId();
+		
 		Reservation reservation = Reservation.builder()
+				.id(reservationId)
 				.zone(zone)
 				.quantity(quantity)
 				.owner(owner)
@@ -64,7 +70,7 @@ public class ReservationServiceImpl implements ReservationService {
 				.build();
 		
 		boolean result = reservationRepository.tryInsertReservation(
-				java.util.UUID.randomUUID().toString(), zone, owner, quantity, 
+				reservationId, zone, owner, quantity, 
 				reservation.getCreatedAt(), reservation.getExpiresAt(), reservation.getStatus());
 		if (!result)
 			throw BadRequestException.message("Không đủ số lượng vé trong zone này, số vé còn lại đang được giữ chỗ chờ đợi thanh toán. Vui lòng thử lại sau");

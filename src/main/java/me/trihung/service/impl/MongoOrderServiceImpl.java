@@ -24,6 +24,7 @@ import me.trihung.repository.OrderRepository;
 import me.trihung.service.OrderService;
 import me.trihung.helper.SecurityHelper;
 import me.trihung.exception.BadRequestException;
+import me.trihung.util.IdGenerator;
 
 /**
  * MongoDB-based OrderService implementation that maintains the same DTOs
@@ -43,6 +44,7 @@ public class MongoOrderServiceImpl implements OrderService {
     public OrderDto createOrderFromReservation(Reservation reservation) {
         // MongoDB implementation - internal String IDs, external UUID DTOs
         Order order = Order.builder()
+                .id(IdGenerator.generateId()) // Ensure order has an ID
                 .zone(reservation.getZone())
                 .owner(reservation.getOwner())
                 .quantity(reservation.getQuantity())

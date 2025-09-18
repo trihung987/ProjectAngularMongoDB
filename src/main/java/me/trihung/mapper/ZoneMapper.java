@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import me.trihung.dto.EventDto;
 import me.trihung.dto.request.EventRequest;
 import me.trihung.entity.Zone;
+import me.trihung.util.IdGenerator;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +45,15 @@ public abstract class ZoneMapper {
         return id != null ? id.toString() : null;
     }
 
-    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "id", expression = "java(generateZoneId())")
     @Mapping(target = "eventId", ignore = true)
     @Mapping(target = "coordinates", expression = "java(toJson(zoneRequest.getCoordinates()))")
     public abstract Zone toZone(EventRequest.ZoneRequest zoneRequest);
+    
+    // Helper method to generate ID for zones
+    protected String generateZoneId() {
+        return IdGenerator.generateId();
+    }
 
     @Mapping(target = "id", expression = "java(stringToUuid(zone.getId()))")
     @Mapping(target = "coordinates", expression = "java(fromJson(zone.getCoordinates()))")

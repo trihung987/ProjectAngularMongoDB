@@ -44,6 +44,7 @@ import me.trihung.repository.RefreshTokenRepository;
 import me.trihung.repository.RoleRepository;
 import me.trihung.repository.UserRepository;
 import me.trihung.service.UserService;
+import me.trihung.util.IdGenerator;
 
 @Service
 @Slf4j
@@ -85,6 +86,7 @@ public class UserServiceImpl implements UserService {
 			throw BadRequestException.message("Tên đăng nhập đã tồn tại");
 		}
 		User user = UserMapper.INSTANCE.toEntity(signUpRequest);
+		user.setId(IdGenerator.generateId()); // Ensure user has an ID
 		user.setPassword(passwordEncoder.encode(signUpRequest.getPassword()));
 		// user.setRoles(Set.of(roleRepository.findByName(RoleType.USER.getValue())));
 		user = userRepository.save(user);
@@ -136,8 +138,12 @@ public class UserServiceImpl implements UserService {
 
 		// Add 30 days
 		LocalDateTime future = nowLocal.plus(30, ChronoUnit.DAYS);
-		RefreshToken token = RefreshToken.builder().token(tokenDTO.getRefreshToken())
-				.username(userDetails.getUsername()).expireTime(future).build();
+		RefreshToken token = RefreshToken.builder()
+				.id(IdGenerator.generateId()) // Ensure refresh token has an ID
+				.token(tokenDTO.getRefreshToken())
+				.username(userDetails.getUsername())
+				.expireTime(future)
+				.build();
 		refreshTokenRepository.save(token);
 		return tokenDTO;
 	}
