@@ -12,12 +12,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.UUID;
 
 
 @Data
 public class EventRequest {
-	private UUID id;
+	private String id;
 
     @NotBlank(message = "Tên sự kiện là bắt buộc")
     @Size(min = 5, message = "Tên sự kiện phải có ít nhất 5 ký tự")

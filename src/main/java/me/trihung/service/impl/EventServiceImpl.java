@@ -98,7 +98,7 @@ public class EventServiceImpl implements EventService {
 		}
 
 		if (event.getZones() != null) {
-			event.getZones().forEach(zone -> zone.setEvent(event));
+			event.getZones().forEach(zone -> zone.setEventId(event.getId()));
 		}
 
 		Event savedEvent = eventRepository.save(event);
@@ -188,7 +188,7 @@ public class EventServiceImpl implements EventService {
 
 	@Override
 	@Transactional(readOnly = true)
-	public EventDto getEventById(UUID id) {
+	public EventDto getEventById(String id) {
 		Event event = eventRepository.findById(id)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy event với id: " + id));
 		if (event.getStatus()!=EventStatus.PUBLISHED) {
@@ -199,7 +199,7 @@ public class EventServiceImpl implements EventService {
 
 	@Override
 	@Transactional
-	public void deleteEvent(UUID id) {
+	public void deleteEvent(String id) {
 		Event event = eventRepository.findById(id)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy event với id: " + id));
 		validateOwner(event);

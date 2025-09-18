@@ -2,7 +2,6 @@ package me.trihung.service.impl;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -86,9 +85,8 @@ public class MongoOrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public OrderDto getOrderById(UUID id) {
-        // Convert UUID to String for MongoDB lookup, return DTO with UUID
-        Order order = orderRepository.findById(id.toString())
+    public OrderDto getOrderById(String id) {
+        Order order = orderRepository.findById(id)
                 .orElseThrow(() -> BadRequestException.message("Không tìm thấy order với id: " + id));
         return OrderMapper.INSTANCE.toDto(order);
     }

@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.*;
 
 import io.swagger.v3.oas.annotations.Operation;
 
-import java.util.UUID;
-
 @RestController
 @RequestMapping("/api/v1/reservations")
 @RequiredArgsConstructor
@@ -37,21 +35,21 @@ public class ReservationController {
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Lấy thông tin giữ chỗ theo ID")
     @GetMapping("/{id}")
-    public ResponseEntity<ReservationDto> getReservation(@PathVariable UUID id) {
+    public ResponseEntity<ReservationDto> getReservation(@PathVariable String id) {
         ReservationDto reservation = reservationService.getReservationById(id);
         return ResponseEntity.ok(reservation);
     }
 
     @Operation(summary = "Xác thực đã hoàn thành")
     @PostMapping("/{id}/confirm")
-    public ResponseEntity<OrderDto> confirmReservation(@PathVariable UUID id) {
+    public ResponseEntity<OrderDto> confirmReservation(@PathVariable String id) {
         
         return ResponseEntity.ok(reservationService.confirmReservation(id));
     }
 
     @Operation(summary = "Hủy giữ chỗ")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> cancelReservation(@PathVariable UUID id) {
+    public ResponseEntity<Void> cancelReservation(@PathVariable String id) {
         reservationService.cancelReservation(id);
         return ResponseEntity.noContent().build();
     }

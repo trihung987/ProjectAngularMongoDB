@@ -5,17 +5,15 @@ import me.trihung.dto.ReservationDto;
 import me.trihung.dto.request.HoldReservationRequest;
 import me.trihung.entity.Reservation;
 
-import java.util.UUID;
-
 public interface ReservationService {
 
 	ReservationDto holdTickets(HoldReservationRequest holdReservationRequest);
 
-	OrderDto confirmReservation(UUID reservationId);
+	OrderDto confirmReservation(String reservationId);
 	
-	Reservation markAsPendingPayment(UUID reservationId);
+	Reservation markAsPendingPayment(String reservationId);
 
-	void cancelReservation(UUID reservationId);
+	void cancelReservation(String reservationId);
 	
-	ReservationDto getReservationById(UUID reservationId);
+	ReservationDto getReservationById(String reservationId);
 }

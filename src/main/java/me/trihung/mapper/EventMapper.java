@@ -54,7 +54,6 @@ public interface EventMapper extends BaseMapper {
     @Mapping(target = "eventImage", ignore = true)
     @Mapping(target = "eventBanner", ignore = true)
     @Mapping(target = "organizer.logo", ignore = true)
-    @Mapping(target = "id", source = "id", qualifiedByName = "uuidToString")
     void updateEventFromRequest(EventRequest requestDto, @MappingTarget Event event);
 
     @AfterMapping

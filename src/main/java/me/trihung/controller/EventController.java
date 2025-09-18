@@ -16,8 +16,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.UUID;
-
 @RestController
 @RequestMapping("/api/v1/events")
  
@@ -109,7 +107,7 @@ public class EventController {
     
     @Operation(summary = "Lấy thông tin chi tiết về event")
     @GetMapping("/{id}")
-    public ResponseEntity<EventDto> getEventById(@PathVariable UUID id) {
+    public ResponseEntity<EventDto> getEventById(@PathVariable String id) {
         EventDto event = eventService.getEventById(id);
         return ResponseEntity.ok(event);
     }
@@ -117,7 +115,7 @@ public class EventController {
     @Operation(summary = "Xóa event")
     @PreAuthorize("isAuthenticated()")
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteEvent(@PathVariable UUID id) {
+    public ResponseEntity<Void> deleteEvent(@PathVariable String id) {
         eventService.deleteEvent(id);
         return ResponseEntity.ok().build();
     }
