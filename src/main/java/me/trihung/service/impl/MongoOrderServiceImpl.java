@@ -161,6 +161,6 @@ public class MongoOrderServiceImpl implements OrderService {
     public List<TopEventDto> getTopEvents(LocalDateTime startDate, LocalDateTime endDate, int limit) {
         // MongoDB aggregation with pagination maintains same DTO structure
         Pageable pageable = PageRequest.of(0, limit);
-        return orderRepository.findTopEvents(startDate, endDate, pageable);
+        return orderRepository.findTopEvents(startDate, endDate, null, pageable);
     }
 }

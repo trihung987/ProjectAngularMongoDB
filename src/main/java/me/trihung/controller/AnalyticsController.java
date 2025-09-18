@@ -44,9 +44,10 @@ public class AnalyticsController {
     
     @GetMapping("/top-events")
     public ResponseEntity<List<TopEventDto>> getTopEvents(
-            @RequestParam(defaultValue = "0") int year) {
+            @RequestParam(defaultValue = "0") int year,
+            @RequestParam(defaultValue = "all") String eventType) {
         int queryYear = (year == 0) ? LocalDate.now().getYear() : year;
-        List<TopEventDto> data = analyticsService.getTopEvents(queryYear);
+        List<TopEventDto> data = analyticsService.getTopEvents(queryYear, eventType);
         return ResponseEntity.ok(data);
     }
 }

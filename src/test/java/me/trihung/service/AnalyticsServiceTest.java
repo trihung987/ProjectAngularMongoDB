@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 
 import me.trihung.dto.EventTypeRevenueDto;
 import me.trihung.dto.RevenueDataDto;
@@ -114,11 +115,11 @@ public class AnalyticsServiceTest {
     void testGetTopEvents() {
         // Given
         List<TopEventDto> expectedData = Arrays.asList(sampleTopEvent);
-        when(orderRepository.findTopEvents(any(LocalDateTime.class), any(LocalDateTime.class), any()))
+        when(orderRepository.findTopEvents(any(LocalDateTime.class), any(LocalDateTime.class), isNull(), any(Pageable.class)))
                 .thenReturn(expectedData);
 
         // When
-        List<TopEventDto> result = analyticsService.getTopEvents(2024);
+        List<TopEventDto> result = analyticsService.getTopEvents(2024, "all");
 
         // Then
         assertNotNull(result);
@@ -128,6 +129,6 @@ public class AnalyticsServiceTest {
         assertEquals(100L, result.get(0).getTickets());
         assertEquals("upcoming", result.get(0).getStatus());
 
-        verify(orderRepository).findTopEvents(any(LocalDateTime.class), any(LocalDateTime.class), any());
+        verify(orderRepository).findTopEvents(any(LocalDateTime.class), any(LocalDateTime.class), isNull(), any(Pageable.class));
     }
 }

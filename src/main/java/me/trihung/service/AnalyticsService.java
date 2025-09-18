@@ -12,5 +12,5 @@ public interface AnalyticsService {
 
     List<EventTypeRevenueDto> getEventTypeRevenue(int year, String eventType);
 
-    List<TopEventDto> getTopEvents(int year);
+    List<TopEventDto> getTopEvents(int year, String eventType);
 }
