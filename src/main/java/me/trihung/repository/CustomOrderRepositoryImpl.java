@@ -71,14 +71,24 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         // Use MongoTemplate for a manual query as backup
         org.springframework.data.mongodb.core.query.Query query = 
             new org.springframework.data.mongodb.core.query.Query();
-        query.addCriteria(Criteria.where("owner.$id").is(owner.getId()));
+        
+        // Try multiple criteria to handle different DBRef formats
+        Criteria ownerCriteria = new Criteria().orOperator(
+            Criteria.where("owner.$id").is(owner.getId()),
+            Criteria.where("owner.id").is(owner.getId()),
+            Criteria.where("owner").is(owner.getId())
+        );
+        
+        query.addCriteria(ownerCriteria);
         query.with(pageable);
         
         List<Order> orders = mongoTemplate.find(query, Order.class);
         long total = mongoTemplate.count(
             new org.springframework.data.mongodb.core.query.Query()
-                .addCriteria(Criteria.where("owner.$id").is(owner.getId())), 
+                .addCriteria(ownerCriteria), 
             Order.class);
+        
+        log.debug("Found {} orders for user {} using manual query", total, owner.getId());
         
         return new PageImpl<>(orders, pageable, total);
     }
@@ -87,16 +97,23 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         log.debug("Using manual MongoDB query to find orders");
         
         try {
-            // Manual query approach
+            // Manual query approach with multiple criteria
             org.springframework.data.mongodb.core.query.Query query = 
                 new org.springframework.data.mongodb.core.query.Query();
-            query.addCriteria(Criteria.where("owner.$id").is(owner.getId()));
+            
+            Criteria ownerCriteria = new Criteria().orOperator(
+                Criteria.where("owner.$id").is(owner.getId()),
+                Criteria.where("owner.id").is(owner.getId()),
+                Criteria.where("owner").is(owner.getId())
+            );
+            
+            query.addCriteria(ownerCriteria);
             query.with(pageable);
             
             List<Order> orders = mongoTemplate.find(query, Order.class);
             long total = mongoTemplate.count(
                 new org.springframework.data.mongodb.core.query.Query()
-                    .addCriteria(Criteria.where("owner.$id").is(owner.getId())), 
+                    .addCriteria(ownerCriteria), 
                 Order.class);
             
             log.debug("Manual query found {} orders", total);
@@ -153,157 +170,206 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
     @Override
     public List<RevenueDataDto> findRevenueDataByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        MatchOperation matchOperation = Aggregation.match(
-                Criteria.where("createdAt").gte(startDate).lte(endDate)
-        );
+        log.debug("Finding revenue data from {} to {}", startDate, endDate);
+        
+        try {
+            MatchOperation matchOperation = Aggregation.match(
+                    Criteria.where("createdAt").gte(startDate).lte(endDate)
+            );
 
-        // Group by year-month format
-        ProjectionOperation addDateFields = Aggregation.project()
-                .andInclude("totalAmount", "createdAt", "zone")
-                .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month");
+            // Convert totalAmount to double for aggregation (handles both String and BigDecimal cases)
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "zone")
+                    .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month")
+                    .and("zone.$id").as("zoneId")
+                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
 
-        GroupOperation groupOperation = Aggregation.group("month")
-                .sum("totalAmount").as("revenue")
-                .count().as("orders")
-                .addToSet("zone.$id").as("uniqueZoneIds");
+            GroupOperation groupOperation = Aggregation.group("month")
+                    .sum("amount").as("revenue")
+                    .count().as("orders")
+                    .addToSet("zoneId").as("uniqueZoneIds");
 
-        // Project to add events count (approximated by unique zones)
-        ProjectionOperation projectionOperation = Aggregation.project()
-                .and("_id").as("month")
-                .and("revenue").as("revenue")
-                .and("orders").as("orders")
-                .and(ArrayOperators.Size.lengthOfArray("uniqueZoneIds")).as("events");
+            // Project to final format
+            ProjectionOperation projectionOperation = Aggregation.project()
+                    .and("_id").as("month")
+                    .and("revenue").as("revenue")
+                    .and("orders").as("orders")
+                    .and(ArrayOperators.Size.lengthOfArray("uniqueZoneIds")).as("events");
 
-        SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.ASC, "month"));
+            SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.ASC, "month"));
 
-        Aggregation aggregation = Aggregation.newAggregation(
-                matchOperation,
-                addDateFields,
-                groupOperation,
-                projectionOperation,
-                sortOperation
-        );
+            Aggregation aggregation = Aggregation.newAggregation(
+                    matchOperation,
+                    addFields,
+                    groupOperation,
+                    projectionOperation,
+                    sortOperation
+            );
 
-        AggregationResults<RevenueDataDto> results = mongoTemplate.aggregate(
-                aggregation, "orders", RevenueDataDto.class);
+            AggregationResults<RevenueDataDto> results = mongoTemplate.aggregate(
+                    aggregation, "orders", RevenueDataDto.class);
 
-        return results.getMappedResults();
+            List<RevenueDataDto> resultList = results.getMappedResults();
+            log.debug("Found {} revenue data points", resultList.size());
+            
+            return resultList;
+            
+        } catch (Exception e) {
+            log.error("Error in findRevenueDataByDateRange: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     @Override
     public List<EventTypeRevenueDto> findEventTypeRevenue(LocalDateTime startDate, LocalDateTime endDate, String eventType) {
-        // Lookup to join with zones and events
-        LookupOperation lookupZone = LookupOperation.newLookup()
-                .from("zones")
-                .localField("zone.$id")
-                .foreignField("_id")
-                .as("zoneData");
+        log.debug("Finding event type revenue from {} to {}, eventType: {}", startDate, endDate, eventType);
+        
+        try {
+            // First add a projection to properly handle DBRef and convert totalAmount
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "quantity")
+                    .and("zone.$id").as("zoneId")
+                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
 
-        LookupOperation lookupEvent = LookupOperation.newLookup()
-                .from("events")
-                .localField("zoneData.eventId")
-                .foreignField("_id")
-                .as("eventData");
+            // Lookup to join with zones and events
+            LookupOperation lookupZone = LookupOperation.newLookup()
+                    .from("zones")
+                    .localField("zoneId")
+                    .foreignField("_id")
+                    .as("zoneData");
 
-        AggregationOperation unwindZone = Aggregation.unwind("zoneData");
-        AggregationOperation unwindEvent = Aggregation.unwind("eventData");
+            LookupOperation lookupEvent = LookupOperation.newLookup()
+                    .from("events")
+                    .localField("zoneData.eventId")
+                    .foreignField("_id")
+                    .as("eventData");
 
-        // Match operation for date range and optional event type
-        Criteria criteria = Criteria.where("createdAt").gte(startDate).lte(endDate);
-        if (eventType != null && !eventType.isEmpty()) {
-            criteria = criteria.and("eventData.eventCategory").is(eventType);
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
+            AggregationOperation unwindEvent = Aggregation.unwind("eventData");
+
+            // Match operation for date range and optional event type
+            Criteria criteria = Criteria.where("createdAt").gte(startDate).lte(endDate);
+            if (eventType != null && !eventType.isEmpty()) {
+                criteria = criteria.and("eventData.eventCategory").is(eventType);
+            }
+            MatchOperation matchOperation = Aggregation.match(criteria);
+
+            // Group by event category
+            GroupOperation groupOperation = Aggregation.group("eventData.eventCategory")
+                    .sum("quantity").as("value")
+                    .sum("amount").as("revenue");
+
+            // Project to match EventTypeRevenueDto structure
+            ProjectionOperation projectionOperation = Aggregation.project()
+                    .and("_id").as("name")
+                    .and("value").as("value")
+                    .and("revenue").as("revenue");
+
+            Aggregation aggregation = Aggregation.newAggregation(
+                    addFields,
+                    lookupZone,
+                    unwindZone,
+                    lookupEvent,
+                    unwindEvent,
+                    matchOperation,
+                    groupOperation,
+                    projectionOperation
+            );
+
+            AggregationResults<EventTypeRevenueDto> results = mongoTemplate.aggregate(
+                    aggregation, "orders", EventTypeRevenueDto.class);
+
+            List<EventTypeRevenueDto> resultList = results.getMappedResults();
+            log.debug("Found {} event type revenue entries", resultList.size());
+            
+            return resultList;
+            
+        } catch (Exception e) {
+            log.error("Error in findEventTypeRevenue: {}", e.getMessage(), e);
+            return List.of();
         }
-        MatchOperation matchOperation = Aggregation.match(criteria);
-
-        // Group by event category
-        GroupOperation groupOperation = Aggregation.group("eventData.eventCategory")
-                .sum("quantity").as("value")
-                .sum("totalAmount").as("revenue");
-
-        // Project to match EventTypeRevenueDto structure
-        ProjectionOperation projectionOperation = Aggregation.project()
-                .and("_id").as("name")
-                .and("value").as("value")
-                .and("revenue").as("revenue");
-
-        Aggregation aggregation = Aggregation.newAggregation(
-                lookupZone,
-                unwindZone,
-                lookupEvent,
-                unwindEvent,
-                matchOperation,
-                groupOperation,
-                projectionOperation
-        );
-
-        AggregationResults<EventTypeRevenueDto> results = mongoTemplate.aggregate(
-                aggregation, "orders", EventTypeRevenueDto.class);
-
-        return results.getMappedResults();
     }
 
     @Override
     public List<TopEventDto> findTopEvents(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
-        // Lookup operations
-        LookupOperation lookupZone = LookupOperation.newLookup()
-                .from("zones")
-                .localField("zone.$id")
-                .foreignField("_id")
-                .as("zoneData");
+        log.debug("Finding top events from {} to {}, limit: {}", startDate, endDate, pageable.getPageSize());
+        
+        try {
+            // First add a projection to properly handle DBRef and convert totalAmount
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "quantity")
+                    .and("zone.$id").as("zoneId")
+                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
 
-        LookupOperation lookupEvent = LookupOperation.newLookup()
-                .from("events")
-                .localField("zoneData.eventId")
-                .foreignField("_id")
-                .as("eventData");
+            // Lookup operations
+            LookupOperation lookupZone = LookupOperation.newLookup()
+                    .from("zones")
+                    .localField("zoneId")
+                    .foreignField("_id")
+                    .as("zoneData");
 
-        AggregationOperation unwindZone = Aggregation.unwind("zoneData");
-        AggregationOperation unwindEvent = Aggregation.unwind("eventData");
+            LookupOperation lookupEvent = LookupOperation.newLookup()
+                    .from("events")
+                    .localField("zoneData.eventId")
+                    .foreignField("_id")
+                    .as("eventData");
 
-        // Match operation for date range
-        MatchOperation matchOperation = Aggregation.match(
-                Criteria.where("createdAt").gte(startDate).lte(endDate)
-        );
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
+            AggregationOperation unwindEvent = Aggregation.unwind("eventData");
 
-        // Group by event
-        GroupOperation groupOperation = Aggregation.group("eventData._id")
-                .first("eventData.eventName").as("name")
-                .sum("totalAmount").as("revenue")
-                .sum("quantity").as("tickets")
-                .first("eventData.startDate").as("startDate")
-                .first("eventData.startTime").as("startTime");
+            // Match operation for date range
+            MatchOperation matchOperation = Aggregation.match(
+                    Criteria.where("createdAt").gte(startDate).lte(endDate)
+            );
 
-        // Project to add status logic
-        ProjectionOperation projectionOperation = Aggregation.project()
-                .and("name").as("name")
-                .and("revenue").as("revenue")
-                .and("tickets").as("tickets")
-                .and(LiteralOperators.Literal.asLiteral("active")).as("status"); // Simplified status logic for now
+            // Group by event
+            GroupOperation groupOperation = Aggregation.group("eventData._id")
+                    .first("eventData.eventName").as("name")
+                    .sum("amount").as("revenue")
+                    .sum("quantity").as("tickets")
+                    .first("eventData.startDate").as("startDate")
+                    .first("eventData.startTime").as("startTime");
 
-        // Sort by revenue descending
-        SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.DESC, "revenue"));
+            // Project to add status logic
+            ProjectionOperation projectionOperation = Aggregation.project()
+                    .and("name").as("name")
+                    .and("revenue").as("revenue")
+                    .and("tickets").as("tickets")
+                    .and(LiteralOperators.Literal.asLiteral("active")).as("status"); // Simplified status logic for now
 
-        // Add pagination
-        AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
-        AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
+            // Sort by revenue descending
+            SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.DESC, "revenue"));
 
-        Aggregation aggregation = Aggregation.newAggregation(
-                lookupZone,
-                unwindZone,
-                lookupEvent,
-                unwindEvent,
-                matchOperation,
-                groupOperation,
-                projectionOperation,
-                sortOperation,
-                skipOperation,
-                limitOperation
-        );
+            // Add pagination
+            AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
+            AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
 
-        AggregationResults<TopEventDto> results = mongoTemplate.aggregate(
-                aggregation, "orders", TopEventDto.class);
+            Aggregation aggregation = Aggregation.newAggregation(
+                    addFields,
+                    lookupZone,
+                    unwindZone,
+                    lookupEvent,
+                    unwindEvent,
+                    matchOperation,
+                    groupOperation,
+                    projectionOperation,
+                    sortOperation,
+                    skipOperation,
+                    limitOperation
+            );
 
-        return results.getMappedResults();
+            AggregationResults<TopEventDto> results = mongoTemplate.aggregate(
+                    aggregation, "orders", TopEventDto.class);
+
+            List<TopEventDto> resultList = results.getMappedResults();
+            log.debug("Found {} top events", resultList.size());
+            
+            return resultList;
+            
+        } catch (Exception e) {
+            log.error("Error in findTopEvents: {}", e.getMessage(), e);
+            return List.of();
+        }
     }
 
     // Helper method to convert aggregation result to OrderDto
