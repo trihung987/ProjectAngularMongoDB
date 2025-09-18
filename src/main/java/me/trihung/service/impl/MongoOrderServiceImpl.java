@@ -19,8 +19,11 @@ import me.trihung.dto.TopEventDto;
 import me.trihung.entity.Order;
 import me.trihung.entity.Reservation;
 import me.trihung.entity.User;
+import me.trihung.entity.Event;
+import me.trihung.entity.Zone;
 import me.trihung.mapper.OrderMapper;
 import me.trihung.repository.OrderRepository;
+import me.trihung.repository.EventRepository;
 import me.trihung.service.OrderService;
 import me.trihung.helper.SecurityHelper;
 import me.trihung.exception.BadRequestException;
@@ -38,6 +41,9 @@ public class MongoOrderServiceImpl implements OrderService {
 
     @Autowired
     private SecurityHelper securityHelper;
+    
+    @Autowired
+    private EventRepository eventRepository;
 
     @Override
     @Transactional
@@ -56,7 +62,18 @@ public class MongoOrderServiceImpl implements OrderService {
         Order saved = orderRepository.save(order);
         
         // MapStruct handles String to UUID conversion for DTO
-        return OrderMapper.INSTANCE.toDto(saved);
+        OrderDto orderDto = OrderMapper.INSTANCE.toDto(saved);
+        
+        // Fetch and set the event name
+        Zone zone = saved.getZone();
+        if (zone != null && zone.getEventId() != null) {
+            Event event = eventRepository.findById(zone.getEventId()).orElse(null);
+            if (event != null) {
+                orderDto.setNameEvent(event.getEventName());
+            }
+        }
+        
+        return orderDto;
     }
 
     @Override
@@ -90,7 +107,19 @@ public class MongoOrderServiceImpl implements OrderService {
     public OrderDto getOrderById(String id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> BadRequestException.message("Không tìm thấy order với id: " + id));
-        return OrderMapper.INSTANCE.toDto(order);
+        
+        OrderDto orderDto = OrderMapper.INSTANCE.toDto(order);
+        
+        // Fetch and set the event name
+        Zone zone = order.getZone();
+        if (zone != null && zone.getEventId() != null) {
+            Event event = eventRepository.findById(zone.getEventId()).orElse(null);
+            if (event != null) {
+                orderDto.setNameEvent(event.getEventName());
+            }
+        }
+        
+        return orderDto;
     }
 
     @Override
