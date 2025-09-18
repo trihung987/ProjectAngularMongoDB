@@ -25,6 +25,8 @@ import me.trihung.exception.UnauthorizedException;
 import me.trihung.helper.SecurityHelper;
 import me.trihung.mapper.EventMapper;
 import me.trihung.repository.EventRepository;
+import me.trihung.repository.OrganizerRepository;
+import me.trihung.repository.VenueRepository;
 import me.trihung.service.EventService;
 import me.trihung.service.FileStorageService; // Import the new service
 import me.trihung.util.IdGenerator;
@@ -43,6 +45,12 @@ public class EventServiceImpl implements EventService {
 	
 	@Autowired
 	private SecurityHelper securityHelper;
+
+	@Autowired
+	private OrganizerRepository organizerRepository;
+
+	@Autowired
+	private VenueRepository venueRepository;
 
 	@Transactional
 	public EventDto createEvent(EventRequest requestDto) {
@@ -64,6 +72,11 @@ public class EventServiceImpl implements EventService {
 
 	private EventDto saveOrUpdateEvent(EventRequest requestDto, EventStatus status) {
 		User user = securityHelper.getCurrentUser();
+		// Ensure user has an ID (should already exist)
+		if (user.getId() == null) {
+			throw new IllegalStateException("Current user has no ID");
+		}
+		
 		Event event;
 		if (requestDto.getId() == null) {
 			event = eventMapper.toEvent(requestDto);
@@ -90,14 +103,42 @@ public class EventServiceImpl implements EventService {
 			String bannerUrl = fileStorageService.storeFile(requestDto.getEventBanner());
 			event.setEventBanner(bannerUrl);
 		}
-		if (requestDto.getOrganizer() != null && requestDto.getOrganizer().getLogo() != null) {
-			validateEventImage(requestDto.getOrganizer().getLogo());
+		// Handle organizer data - either with or without logo
+		if (requestDto.getOrganizer() != null) {
+			// Ensure organizer exists and has an ID
 			if (event.getOrganizer() == null) {
 				event.setOrganizer(new me.trihung.entity.Organizer());
 				event.getOrganizer().setId(IdGenerator.generateId()); // Ensure organizer has an ID
 			}
-			String logoUrl = fileStorageService.storeFile(requestDto.getOrganizer().getLogo());
-			event.getOrganizer().setLogo(logoUrl);
+			
+			// Update organizer fields from request
+			if (requestDto.getOrganizer().getName() != null) {
+				event.getOrganizer().setName(requestDto.getOrganizer().getName());
+			}
+			if (requestDto.getOrganizer().getBio() != null) {
+				event.getOrganizer().setBio(requestDto.getOrganizer().getBio());
+			}
+			
+			// Handle logo if provided
+			if (requestDto.getOrganizer().getLogo() != null) {
+				validateEventImage(requestDto.getOrganizer().getLogo());
+				String logoUrl = fileStorageService.storeFile(requestDto.getOrganizer().getLogo());
+				event.getOrganizer().setLogo(logoUrl);
+			}
+			
+			// Save organizer BEFORE saving event to avoid DBRef null ID issue
+			event.setOrganizer(organizerRepository.save(event.getOrganizer()));
+		}
+
+		// Handle venue data - save venue before event to avoid DBRef null ID issue
+		if (event.getVenue() != null) {
+			// Ensure venue has an ID
+			if (event.getVenue().getId() == null) {
+				event.getVenue().setId(IdGenerator.generateId());
+			}
+			
+			// Save venue BEFORE saving event to avoid DBRef null ID issue
+			event.setVenue(venueRepository.save(event.getVenue()));
 		}
 
 		if (event.getZones() != null) {
