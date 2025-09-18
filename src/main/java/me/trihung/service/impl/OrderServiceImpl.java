@@ -3,7 +3,6 @@ package me.trihung.service.impl;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
@@ -12,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import me.trihung.dto.OrderDto;
 import me.trihung.dto.OrderPageResponse;
+import me.trihung.dto.EventTypeRevenueDto;
+import me.trihung.dto.RevenueDataDto;
+import me.trihung.dto.TopEventDto;
 import me.trihung.entity.Order;
 import me.trihung.entity.Reservation;
 import me.trihung.entity.User;
@@ -81,9 +83,28 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public OrderDto getOrderById(UUID id) {
-        Order order = orderRepository.findById(id.toString())
+    public OrderDto getOrderById(String id) {
+        Order order = orderRepository.findById(id)
                 .orElseThrow(() -> BadRequestException.message("Không tìm thấy order với id: " + id));
         return OrderMapper.INSTANCE.toDto(order);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RevenueDataDto> getRevenueDataByDateRange(LocalDateTime startDate, LocalDateTime endDate) {
+        return orderRepository.findRevenueDataByDateRange(startDate, endDate);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventTypeRevenueDto> getEventTypeRevenue(LocalDateTime startDate, LocalDateTime endDate, String eventType) {
+        return orderRepository.findEventTypeRevenue(startDate, endDate, eventType);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TopEventDto> getTopEvents(LocalDateTime startDate, LocalDateTime endDate, int limit) {
+        Pageable pageable = PageRequest.of(0, limit);
+        return orderRepository.findTopEvents(startDate, endDate, pageable);
     }
 }

@@ -2,7 +2,6 @@ package me.trihung.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 import me.trihung.dto.EventTypeRevenueDto;
 import me.trihung.dto.OrderDto;
@@ -19,7 +18,7 @@ public interface OrderService {
             String sortBy,
             String sortDirection
     );
-    OrderDto getOrderById(UUID id);
+    OrderDto getOrderById(String id);
     
     // Analytics methods that return the same DTOs as before
     List<RevenueDataDto> getRevenueDataByDateRange(LocalDateTime startDate, LocalDateTime endDate);

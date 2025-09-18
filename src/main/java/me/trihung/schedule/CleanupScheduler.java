@@ -26,7 +26,7 @@ public class CleanupScheduler {
     public void scheduleRefreshTokenCleanup() {
         log.info("----------start clean up refresh tokens----------");
         LocalDateTime now = LocalDateTime.now();
-        refreshTokenRepository.deleteExpiredTokens(now);
+        refreshTokenRepository.deleteByExpireTimeBefore(now);
         log.info("----------end clean up refresh tokens------------");
 
     }
@@ -36,7 +36,7 @@ public class CleanupScheduler {
     @Transactional
     public void cleanupExpiredReservations() {
         LocalDateTime now = LocalDateTime.now();
-        int deleted = reservationRepository.deleteExpiredReservations(now);
+        long deleted = reservationRepository.deleteByExpiresAtBefore(now);
         if (deleted > 0) {
         	System.out.println("deleted");
             log.info("Deleted {} expired reservations.", deleted);

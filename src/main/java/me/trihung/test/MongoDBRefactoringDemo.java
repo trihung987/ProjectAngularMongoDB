@@ -28,14 +28,14 @@ public class MongoDBRefactoringDemo {
 
     /**
      * Demonstrates that OrderDto structure remains exactly the same
-     * with UUID fields preserved for frontend compatibility
+     * with String fields for MongoDB compatibility
      */
     public void demonstrateOrderDtoStructure() {
         // Create sample data
         OrderDto orderDto = OrderDto.builder()
-                .id(UUID.randomUUID())
-                .zoneId(UUID.randomUUID())
-                .ownerId(UUID.randomUUID())
+                .id(java.util.UUID.randomUUID().toString())
+                .zoneId(java.util.UUID.randomUUID().toString())
+                .ownerId(java.util.UUID.randomUUID().toString())
                 .quantity(2)
                 .totalAmount(new BigDecimal("150.00"))
                 .createdAt(LocalDateTime.now())

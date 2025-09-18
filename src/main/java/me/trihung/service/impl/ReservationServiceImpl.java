@@ -1,7 +1,6 @@
 package me.trihung.service.impl;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.repository.query.Param;
@@ -42,7 +41,7 @@ public class ReservationServiceImpl implements ReservationService {
 	// Giữ vé 15p
 	@Transactional
 	public ReservationDto holdTickets(HoldReservationRequest holdReservationRequest) {
-		UUID zoneId = holdReservationRequest.getZoneId();
+		String zoneId = holdReservationRequest.getZoneId();
 		int quantity = holdReservationRequest.getQuantity();
 		Zone zone = zoneRepository.findById(zoneId)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy zone"));
@@ -62,11 +61,12 @@ public class ReservationServiceImpl implements ReservationService {
 				.createdAt(LocalDateTime.now())
 				.expiresAt(LocalDateTime.now().plusMinutes(HOLD_MINUTES))
 				.status(ReservationStatus.HOLD)
-				.id(UUID.randomUUID())
 				.build();
-		int result = reservationRepository.tryInsertReservation(reservation.getId(), zone.getId(), owner.getId(), quantity, reservation.getCreatedAt(),
-				reservation.getExpiresAt(), reservation.getStatus().name());
-		if (result == 0)
+		
+		boolean result = reservationRepository.tryInsertReservation(
+				java.util.UUID.randomUUID().toString(), zone, owner, quantity, 
+				reservation.getCreatedAt(), reservation.getExpiresAt(), reservation.getStatus());
+		if (!result)
 			throw BadRequestException.message("Không đủ số lượng vé trong zone này, số vé còn lại đang được giữ chỗ chờ đợi thanh toán. Vui lòng thử lại sau");
 		ReservationDto reservationDto = ReservationMapper.INSTANCE.toDto(reservation);
 		return reservationDto;
@@ -79,7 +79,7 @@ public class ReservationServiceImpl implements ReservationService {
 //     @Param("status") ReservationStatus status
 	@Override
 	@Transactional(readOnly = true)
-	public ReservationDto getReservationById(UUID reservationId) {
+	public ReservationDto getReservationById(String reservationId) {
 	    Reservation reservation = reservationRepository.findById(reservationId)
 	            .orElseThrow(() -> BadRequestException.message("Không tìm thấy giữ chỗ"));
 	    return ReservationMapper.INSTANCE.toDto(reservation);
@@ -87,7 +87,7 @@ public class ReservationServiceImpl implements ReservationService {
 
 
 	@Transactional
-	public Reservation markAsPendingPayment(UUID reservationId) {
+	public Reservation markAsPendingPayment(String reservationId) {
 		Reservation reservation = reservationRepository.findById(reservationId)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy giữ chỗ"));
 
@@ -106,7 +106,7 @@ public class ReservationServiceImpl implements ReservationService {
 
 	// xác nhận thành công
 	@Transactional
-	public OrderDto confirmReservation(UUID reservationId) {
+	public OrderDto confirmReservation(String reservationId) {
 		Reservation reservation = reservationRepository.findById(reservationId)
 				.orElseThrow(() -> BadRequestException.message("Giữ chỗ không tìm thấy"));
 
@@ -134,7 +134,7 @@ public class ReservationServiceImpl implements ReservationService {
 
 	
 	@Transactional
-	public void cancelReservation(UUID reservationId) {
+	public void cancelReservation(String reservationId) {
 		reservationRepository.deleteById(reservationId);
 	}
 }
