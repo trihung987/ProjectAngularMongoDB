@@ -1,0 +1,35 @@
+spring:
+  profiles:
+    active: dev
+  
+  # --- CẤU HÌNH MỚI CHO MONGODB ---
+  data:
+    mongodb:
+      # Sử dụng các biến được định nghĩa trong file dev hoặc biến môi trường
+      # Giá trị mặc định là localhost:27017 nếu không tìm thấy biến
+      host: ${MONGO_HOST:localhost}
+      port: ${MONGO_PORT:27017}
+      database: ${MONGO_DB}
+
+  # --- CÁC CẤU HÌNH KHÁC GIỮ NGUYÊN ---
+  servlet:
+    multipart:
+      maxRequestSize: 1GB
+      enabled: true
+      maxFileSize: 1GB
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.web.cors: DEBUG
+    org.springframework.security.web.access.intercept: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+
+# Sửa lại để lấy giá trị từ file properties/env bằng cú pháp ${...}
+access-token:
+  private: ${ACCESS_TOKEN_PRIVATE_KEY_PATH}
+  public: ${ACCESS_TOKEN_PUBLIC_KEY_PATH}
+refresh-token:
+  private: ${REFRESH_TOKEN_PRIVATE_KEY_PATH}
+  public: ${REFRESH_TOKEN_PUBLIC_KEY_PATH}
