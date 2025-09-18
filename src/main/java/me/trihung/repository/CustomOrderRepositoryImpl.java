@@ -32,7 +32,10 @@ import me.trihung.dto.TopEventDto;
 import me.trihung.entity.Order;
 import me.trihung.entity.User;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Repository
+@Slf4j
 public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
     @Autowired
@@ -40,77 +43,112 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
     @Override
     public Page<OrderDto> findOrderDtosByOwner(User owner, Pageable pageable) {
-        // Lookup operations to join with Zone and Event collections
-        LookupOperation lookupZone = LookupOperation.newLookup()
-                .from("zones")
-                .localField("zone.$id")
-                .foreignField("_id")
-                .as("zoneData");
-
-        LookupOperation lookupEvent = LookupOperation.newLookup()
-                .from("events")
-                .localField("zoneData.eventId")
-                .foreignField("_id")
-                .as("eventData");
-
-        // Match operation to filter by owner
-        MatchOperation matchOperation = Aggregation.match(
-                Criteria.where("owner.$id").is(owner.getId())
-        );
-
-        // Unwind operations
-        AggregationOperation unwindZone = Aggregation.unwind("zoneData");
-        AggregationOperation unwindEvent = Aggregation.unwind("eventData");
-
-        // Project to OrderDto structure
-        ProjectionOperation projectionOperation = Aggregation.project()
-                .and("_id").as("id")
-                .and("zoneData._id").as("zoneId")
-                .and("owner.$id").as("ownerId")
-                .and("quantity").as("quantity")
-                .and("totalAmount").as("totalAmount")
-                .and("createdAt").as("createdAt")
-                .and("zoneData.price").as("priceZone")
-                .and("zoneData.name").as("nameZone")
-                .and("eventData.eventName").as("nameEvent");
-
-        // Add skip and limit for pagination
-        AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
-        AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
-
-        // Create aggregation pipeline
-        Aggregation aggregation = Aggregation.newAggregation(
-                matchOperation,
-                lookupZone,
-                unwindZone,
-                lookupEvent,
-                unwindEvent,
-                projectionOperation,
-                skipOperation,
-                limitOperation
-        );
-
-        AggregationResults<OrderDtoAggregate> results = mongoTemplate.aggregate(
-                aggregation, "orders", OrderDtoAggregate.class);
+        log.debug("Finding orders for user with ID: {}", owner.getId());
         
-        // Convert to OrderDto with proper UUID conversion
-        List<OrderDto> orders = results.getMappedResults().stream()
-                .map(this::convertToOrderDto)
-                .collect(Collectors.toList());
-
-        // Count total for pagination
-        Aggregation countAggregation = Aggregation.newAggregation(
-                matchOperation,
-                Aggregation.count().as("total")
-        );
+        try {
+            // Try the simple Spring Data MongoDB method first
+            Page<Order> orderPage = findByOwner(owner, pageable);
+            
+            log.debug("Found {} orders using simple repository method", orderPage.getTotalElements());
+            
+            // Convert to DTOs
+            List<OrderDto> orderDtos = orderPage.getContent().stream()
+                    .map(this::convertOrderToDto)
+                    .collect(Collectors.toList());
+            
+            log.debug("Converted {} orders to DTOs", orderDtos.size());
+            
+            return new PageImpl<>(orderDtos, pageable, orderPage.getTotalElements());
+            
+        } catch (Exception e) {
+            log.error("Error with simple repository method, trying manual query for user {}: {}", 
+                     owner.getId(), e.getMessage(), e);
+            return findOrderDtosByOwnerManual(owner, pageable);
+        }
+    }
+    
+    private Page<Order> findByOwner(User owner, Pageable pageable) {
+        // Use MongoTemplate for a manual query as backup
+        org.springframework.data.mongodb.core.query.Query query = 
+            new org.springframework.data.mongodb.core.query.Query();
+        query.addCriteria(Criteria.where("owner.$id").is(owner.getId()));
+        query.with(pageable);
         
-        AggregationResults<CountResult> countResults = mongoTemplate.aggregate(
-                countAggregation, "orders", CountResult.class);
+        List<Order> orders = mongoTemplate.find(query, Order.class);
+        long total = mongoTemplate.count(
+            new org.springframework.data.mongodb.core.query.Query()
+                .addCriteria(Criteria.where("owner.$id").is(owner.getId())), 
+            Order.class);
         
-        long total = countResults.getMappedResults().isEmpty() ? 0 : 
-                     countResults.getMappedResults().get(0).getTotal();
-
         return new PageImpl<>(orders, pageable, total);
+    }
+    
+    private Page<OrderDto> findOrderDtosByOwnerManual(User owner, Pageable pageable) {
+        log.debug("Using manual MongoDB query to find orders");
+        
+        try {
+            // Manual query approach
+            org.springframework.data.mongodb.core.query.Query query = 
+                new org.springframework.data.mongodb.core.query.Query();
+            query.addCriteria(Criteria.where("owner.$id").is(owner.getId()));
+            query.with(pageable);
+            
+            List<Order> orders = mongoTemplate.find(query, Order.class);
+            long total = mongoTemplate.count(
+                new org.springframework.data.mongodb.core.query.Query()
+                    .addCriteria(Criteria.where("owner.$id").is(owner.getId())), 
+                Order.class);
+            
+            log.debug("Manual query found {} orders", total);
+            
+            // Convert to DTOs
+            List<OrderDto> orderDtos = orders.stream()
+                    .map(this::convertOrderToDto)
+                    .collect(Collectors.toList());
+            
+            return new PageImpl<>(orderDtos, pageable, total);
+            
+        } catch (Exception e) {
+            log.error("Manual query also failed for user {}: {}", owner.getId(), e.getMessage(), e);
+            return new PageImpl<>(List.of(), pageable, 0);
+        }
+    }
+    
+    private OrderDto convertOrderToDto(Order order) {
+        log.debug("Converting order {} to DTO", order.getId());
+        
+        OrderDto dto = OrderDto.builder()
+                .id(order.getId())
+                .quantity(order.getQuantity())
+                .totalAmount(order.getTotalAmount())
+                .createdAt(order.getCreatedAt())
+                .ownerId(order.getOwner() != null ? order.getOwner().getId() : null)
+                .build();
+        
+        // Get zone information if available
+        if (order.getZone() != null) {
+            dto.setZoneId(order.getZone().getId());
+            dto.setPriceZone(order.getZone().getPrice());
+            dto.setNameZone(order.getZone().getName());
+            
+            // Get event information if zone has eventId
+            if (order.getZone().getEventId() != null) {
+                try {
+                    org.springframework.data.mongodb.core.query.Query eventQuery = 
+                        new org.springframework.data.mongodb.core.query.Query();
+                    eventQuery.addCriteria(Criteria.where("id").is(order.getZone().getEventId()));
+                    
+                    me.trihung.entity.Event event = mongoTemplate.findOne(eventQuery, me.trihung.entity.Event.class);
+                    if (event != null) {
+                        dto.setNameEvent(event.getEventName());
+                    }
+                } catch (Exception e) {
+                    log.warn("Could not fetch event data for zone {}: {}", order.getZone().getId(), e.getMessage());
+                }
+            }
+        }
+        
+        return dto;
     }
 
     @Override
