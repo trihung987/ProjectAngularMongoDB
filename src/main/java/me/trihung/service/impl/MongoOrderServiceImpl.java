@@ -29,11 +29,14 @@ import me.trihung.helper.SecurityHelper;
 import me.trihung.exception.BadRequestException;
 import me.trihung.util.IdGenerator;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * MongoDB-based OrderService implementation that maintains the same DTOs
  * and provides identical data structure to the frontend
  */
 @Service
+@Slf4j
 public class MongoOrderServiceImpl implements OrderService {
 
     @Autowired
@@ -79,6 +82,9 @@ public class MongoOrderServiceImpl implements OrderService {
     @Override
     @Transactional(readOnly = true)
     public OrderPageResponse getOrdersPaged(int page, int size, String sortBy, String sortDirection) {
+        log.debug("Getting paged orders: page={}, size={}, sortBy={}, sortDirection={}", 
+                 page, size, sortBy, sortDirection);
+        
         Sort sort = Sort.unsorted();
         if (sortBy != null && !sortBy.isBlank()) {
             sort = Sort.by(
@@ -88,18 +94,32 @@ public class MongoOrderServiceImpl implements OrderService {
         }
 
         Pageable pageable = PageRequest.of(page, size, sort);
-        User user = securityHelper.getCurrentUser();
         
-        // Uses custom MongoDB aggregation to return OrderDto with UUID fields
-        Page<OrderDto> orderPage = orderRepository.findOrderDtosByOwner(user, pageable);
+        try {
+            User user = securityHelper.getCurrentUser();
+            log.debug("Found current user: {} (ID: {})", user.getUsername(), user.getId());
+            
+            // Uses custom MongoDB aggregation to return OrderDto with UUID fields
+            Page<OrderDto> orderPage = orderRepository.findOrderDtosByOwner(user, pageable);
+            
+            log.debug("Retrieved {} orders from repository, total elements: {}", 
+                     orderPage.getContent().size(), orderPage.getTotalElements());
 
-        return new OrderPageResponse(
-                orderPage.getContent(),
-                orderPage.getTotalElements(),
-                orderPage.getTotalPages(),
-                orderPage.getNumber(),
-                orderPage.getSize()
-        );
+            OrderPageResponse response = new OrderPageResponse(
+                    orderPage.getContent(),
+                    orderPage.getTotalElements(),
+                    orderPage.getTotalPages(),
+                    orderPage.getNumber(),
+                    orderPage.getSize()
+            );
+            
+            log.debug("Returning response with {} orders", response.getContent().size());
+            return response;
+            
+        } catch (Exception e) {
+            log.error("Error getting paged orders: {}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override
