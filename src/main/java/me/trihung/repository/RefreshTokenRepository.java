@@ -3,20 +3,16 @@ package me.trihung.repository;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 
-import jakarta.transaction.Transactional;
 import me.trihung.entity.RefreshToken;
 
-public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
+public interface RefreshTokenRepository extends MongoRepository<RefreshToken, String> {
     void deleteByToken(String token);
 
-    @Modifying
-    @Transactional
-    @Query("DELETE FROM RefreshToken t WHERE t.expireTime < :now")
-    void deleteExpiredTokens(LocalDateTime now);
+    @Query(value = "{'expireTime': {'$lt': ?0}}", delete = true)
+    long deleteByExpireTimeBefore(LocalDateTime now);
 
     Optional<RefreshToken> findByToken(String refreshToken);
 

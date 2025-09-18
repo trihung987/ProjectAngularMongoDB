@@ -1,25 +1,23 @@
 package me.trihung.entity;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import jakarta.persistence.*;
 import lombok.*;
 import me.trihung.enums.Shape;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.math.BigDecimal;
-import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
-@Table(name = "zones")
+@Document(collection = "zones")
 @EqualsAndHashCode(onlyExplicitlyIncluded = true, callSuper = false)
 public class Zone extends BaseEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     @EqualsAndHashCode.Include
-    private UUID id;
+    private String id;
 
     private String name;
     
@@ -27,10 +25,8 @@ public class Zone extends BaseEntity {
     
     private BigDecimal price;
 
-
     private String color;
 
-    @Enumerated(EnumType.STRING) // Lưu tên của enum
     private Shape shape;
 
     private Boolean isSellable;
@@ -41,14 +37,10 @@ public class Zone extends BaseEntity {
     
     private Double rotation;
 
-    @Lob // Dùng @Lob hoặc @Column(columnDefinition = "TEXT") để lưu chuỗi JSON dài
     private String coordinates; 
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id")
-    @JsonBackReference //Chống bị lặp vô hạn event -> zone ->event ->zone...
-    private Event event;
+    // Reference to Event by ID instead of embedded object
+    private String eventId;
     
-    @Column(nullable = false)
     private Integer soldTickets = 0;
 }

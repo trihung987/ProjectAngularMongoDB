@@ -12,9 +12,10 @@ import me.trihung.dto.request.SignUpRequest;
 import me.trihung.entity.User;
 
 @Mapper(componentModel = "spring")
-public interface UserMapper { 
+public interface UserMapper extends BaseMapper { 
 	UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
 	
+	@Mapping(source = "id", target = "id", qualifiedByName = "stringToUuid")
 	UserDTO toDto (User user);
 	
 	@Mapping(target = "avatarUrl", ignore = true)
@@ -22,5 +23,4 @@ public interface UserMapper {
 	@Mapping(target = "id", ignore = true)
 	@Mapping(target = "roles", ignore = true)
 	User toEntity (SignUpRequest signUpRequest);
-
 }

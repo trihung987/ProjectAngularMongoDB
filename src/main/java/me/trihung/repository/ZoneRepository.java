@@ -1,13 +1,13 @@
 package me.trihung.repository;
 
-import java.util.UUID;
-
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import me.trihung.entity.Zone;
 
-@Repository
-public interface ZoneRepository extends JpaRepository<Zone, UUID> {
+import java.util.List;
 
+@Repository
+public interface ZoneRepository extends MongoRepository<Zone, String> {
+    List<Zone> findByEventId(String eventId);
 }
