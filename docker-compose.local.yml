@@ -1,0 +1,21 @@
+# This docker-compose file is for users who already have MongoDB installed locally
+# Use this when you want to run only the Spring Boot application in Docker
+# while connecting to your local MongoDB instance
+
+services:
+  # Spring Boot application only
+  angular-app:
+    build: .
+    container_name: angular-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      MONGO_HOST: host.docker.internal  # Points to localhost from inside Docker container
+      MONGO_PORT: 27017
+      MONGO_DB: angulartts-mongo
+      SPRING_PROFILES_ACTIVE: dev
+    volumes:
+      - ./access-refresh-token-keys:/app/access-refresh-token-keys
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # For Linux Docker to access host services
