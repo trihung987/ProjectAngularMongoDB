@@ -19,6 +19,7 @@ import me.trihung.dto.EventPageResponse;
 import me.trihung.dto.request.EventRequest;
 import me.trihung.entity.Event;
 import me.trihung.entity.User;
+import me.trihung.entity.Zone;
 import me.trihung.enums.EventStatus;
 import me.trihung.exception.BadRequestException;
 import me.trihung.exception.UnauthorizedException;
@@ -27,6 +28,7 @@ import me.trihung.mapper.EventMapper;
 import me.trihung.repository.EventRepository;
 import me.trihung.repository.OrganizerRepository;
 import me.trihung.repository.VenueRepository;
+import me.trihung.repository.ZoneRepository;
 import me.trihung.service.EventService;
 import me.trihung.service.FileStorageService; // Import the new service
 import me.trihung.util.IdGenerator;
@@ -51,6 +53,9 @@ public class EventServiceImpl implements EventService {
 
 	@Autowired
 	private VenueRepository venueRepository;
+
+	@Autowired
+	private ZoneRepository zoneRepository;
 
 	@Transactional
 	public EventDto createEvent(EventRequest requestDto) {
@@ -141,8 +146,18 @@ public class EventServiceImpl implements EventService {
 			event.setVenue(venueRepository.save(event.getVenue()));
 		}
 
+		// Handle zones - save each zone as independent document with eventId reference
 		if (event.getZones() != null) {
-			event.getZones().forEach(zone -> zone.setEvent(event));
+			event.getZones().forEach(zone -> {
+				// Ensure zone has an ID
+				if (zone.getId() == null) {
+					zone.setId(IdGenerator.generateId());
+				}
+				// Set the eventId reference
+				zone.setEvent(event);
+				// Save zone as independent document
+				zoneRepository.save(zone);
+			});
 		}
 
 		Event savedEvent = eventRepository.save(event);
@@ -247,6 +262,13 @@ public class EventServiceImpl implements EventService {
 		Event event = eventRepository.findById(id)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy event với id: " + id));
 		validateOwner(event);
+		
+		// Delete associated zones first
+		List<Zone> eventZones = zoneRepository.findByEventId(id);
+		if (!eventZones.isEmpty()) {
+			zoneRepository.deleteAll(eventZones);
+		}
+		
 		eventRepository.deleteById(id);
 	}
 	
