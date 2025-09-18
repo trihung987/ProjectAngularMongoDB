@@ -27,6 +27,7 @@ import me.trihung.mapper.EventMapper;
 import me.trihung.repository.EventRepository;
 import me.trihung.service.EventService;
 import me.trihung.service.FileStorageService; // Import the new service
+import me.trihung.util.IdGenerator;
 
 @Service
 public class EventServiceImpl implements EventService {
@@ -66,6 +67,7 @@ public class EventServiceImpl implements EventService {
 		Event event;
 		if (requestDto.getId() == null) {
 			event = eventMapper.toEvent(requestDto);
+			event.setId(IdGenerator.generateId()); // Ensure event has an ID
 			event.setOwner(user);
 		} else {
 			event = eventRepository.findById(requestDto.getId()).orElseThrow(
@@ -92,6 +94,7 @@ public class EventServiceImpl implements EventService {
 			validateEventImage(requestDto.getOrganizer().getLogo());
 			if (event.getOrganizer() == null) {
 				event.setOrganizer(new me.trihung.entity.Organizer());
+				event.getOrganizer().setId(IdGenerator.generateId()); // Ensure organizer has an ID
 			}
 			String logoUrl = fileStorageService.storeFile(requestDto.getOrganizer().getLogo());
 			event.getOrganizer().setLogo(logoUrl);
