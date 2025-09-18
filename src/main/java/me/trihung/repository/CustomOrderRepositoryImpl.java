@@ -182,26 +182,31 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     Criteria.where("createdAt").gte(startDate).lte(endDate)
             );
 
+            // Add field to convert string totalAmount to double
+            AggregationOperation addFieldsStringToNumber = Aggregation.addFields()
+                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
+                    .build();
+
+            // Project necessary fields with numeric amount and zone ID
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt")
+                    .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month")
+                    .and("zone.$id").as("zoneId")
+                    .and("numericAmount").as("amount");
+
             // Lookup zones to get eventId
             LookupOperation lookupZone = LookupOperation.newLookup()
                     .from("zones")
-                    .localField("zone.$id")
+                    .localField("zoneId")
                     .foreignField("_id")
                     .as("zoneData");
 
             AggregationOperation unwindZone = Aggregation.unwind("zoneData");
 
-            // Use addFields to convert string totalAmount to double before aggregation
-            AggregationOperation addFieldsOperation = Aggregation.addFields()
-                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
-                    .build();
-
-            // Project necessary fields with numeric amount
+            // Project necessary fields with eventId
             ProjectionOperation projectFields = Aggregation.project()
-                    .andInclude("createdAt")
-                    .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month")
-                    .and("zoneData.eventId").as("eventId")
-                    .and("numericAmount").as("amount");
+                    .andInclude("month", "amount")
+                    .and("zoneData.eventId").as("eventId");
 
             GroupOperation groupOperation = Aggregation.group("month")
                     .sum("amount").as("revenue")
@@ -219,9 +224,10 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             Aggregation aggregation = Aggregation.newAggregation(
                     matchOperation,
+                    addFieldsStringToNumber,
+                    addFields,
                     lookupZone,
                     unwindZone,
-                    addFieldsOperation,
                     projectFields,
                     groupOperation,
                     projectionOperation,
@@ -231,6 +237,11 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             AggregationResults<RevenueDataDto> results = mongoTemplate.aggregate(
                     aggregation, "orders", RevenueDataDto.class);
 
+            if (results == null) {
+                log.warn("MongoDB aggregation returned null results for revenue data");
+                return List.of();
+            }
+            
             List<RevenueDataDto> resultList = results.getMappedResults();
             log.debug("Found {} revenue data points", resultList.size());
             
@@ -327,6 +338,11 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             AggregationResults<EventTypeRevenueDto> results = mongoTemplate.aggregate(
                     aggregation, "orders", EventTypeRevenueDto.class);
 
+            if (results == null) {
+                log.warn("MongoDB aggregation returned null results for event type revenue");
+                return List.of();
+            }
+
             List<EventTypeRevenueDto> resultList = results.getMappedResults();
             log.debug("Found {} event type revenue entries", resultList.size());
             
@@ -339,8 +355,8 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
     }
 
     @Override
-    public List<TopEventDto> findTopEvents(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
-        log.debug("Finding top events from {} to {}, limit: {}", startDate, endDate, pageable.getPageSize());
+    public List<TopEventDto> findTopEvents(LocalDateTime startDate, LocalDateTime endDate, String eventType, Pageable pageable) {
+        log.debug("Finding top events from {} to {}, eventType: {}, limit: {}", startDate, endDate, eventType, pageable.getPageSize());
         
         try {
             // Match orders by date range
@@ -376,6 +392,14 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             AggregationOperation unwindEvent = Aggregation.unwind("eventData");
 
+            // Apply event type filter if specified
+            MatchOperation eventTypeMatch = null;
+            if (eventType != null && !eventType.isEmpty()) {
+                eventTypeMatch = Aggregation.match(
+                        Criteria.where("eventData.eventCategory").is(eventType)
+                );
+            }
+
             // Group by event to calculate totals
             GroupOperation groupOperation = Aggregation.group("eventData._id")
                     .first("eventData.eventName").as("name")
@@ -402,23 +426,40 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
             AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
 
-            Aggregation aggregation = Aggregation.newAggregation(
+            // Build aggregation pipeline dynamically
+            List<AggregationOperation> operations = Arrays.asList(
                     matchOperation,
                     addFieldsStringToNumber,
                     addFields,
                     lookupZone,
                     unwindZone,
                     lookupEvent,
-                    unwindEvent,
-                    groupOperation,
-                    projectionOperation,
-                    sortOperation,
-                    skipOperation,
-                    limitOperation
+                    unwindEvent
             );
+
+            // Add event type filter if needed
+            if (eventTypeMatch != null) {
+                operations = new java.util.ArrayList<>(operations);
+                operations.add(eventTypeMatch);
+            }
+
+            // Add final operations
+            operations = new java.util.ArrayList<>(operations);
+            operations.add(groupOperation);
+            operations.add(projectionOperation);
+            operations.add(sortOperation);
+            operations.add(skipOperation);
+            operations.add(limitOperation);
+
+            Aggregation aggregation = Aggregation.newAggregation(operations);
 
             AggregationResults<TopEventDtoDetailed> results = mongoTemplate.aggregate(
                     aggregation, "orders", TopEventDtoDetailed.class);
+
+            if (results == null) {
+                log.warn("MongoDB aggregation returned null results for top events");
+                return List.of();
+            }
 
             List<TopEventDtoDetailed> detailedList = results.getMappedResults();
             
@@ -435,12 +476,12 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         } catch (Exception e) {
             log.error("Error in findTopEvents: {}", e.getMessage(), e);
             // Fallback to simpler aggregation if the complex one fails
-            return findTopEventsSimple(startDate, endDate, pageable);
+            return findTopEventsSimple(startDate, endDate, eventType, pageable);
         }
     }
     
     // Fallback method with simpler status logic
-    private List<TopEventDto> findTopEventsSimple(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
+    private List<TopEventDto> findTopEventsSimple(LocalDateTime startDate, LocalDateTime endDate, String eventType, Pageable pageable) {
         try {
             log.debug("Using simplified top events query as fallback");
             
@@ -477,6 +518,14 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             AggregationOperation unwindEvent = Aggregation.unwind("eventData");
 
+            // Apply event type filter if specified
+            MatchOperation eventTypeMatch = null;
+            if (eventType != null && !eventType.isEmpty()) {
+                eventTypeMatch = Aggregation.match(
+                        Criteria.where("eventData.eventCategory").is(eventType)
+                );
+            }
+
             // Group by event to calculate totals
             GroupOperation groupOperation = Aggregation.group("eventData._id")
                     .first("eventData.eventName").as("name")
@@ -497,23 +546,40 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
             AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
 
-            Aggregation aggregation = Aggregation.newAggregation(
+            // Build aggregation pipeline dynamically for fallback
+            List<AggregationOperation> operations = Arrays.asList(
                     matchOperation,
                     addFieldsStringToNumber,
                     addFields,
                     lookupZone,
                     unwindZone,
                     lookupEvent,
-                    unwindEvent,
-                    groupOperation,
-                    projectionOperation,
-                    sortOperation,
-                    skipOperation,
-                    limitOperation
+                    unwindEvent
             );
+
+            // Add event type filter if needed
+            if (eventTypeMatch != null) {
+                operations = new java.util.ArrayList<>(operations);
+                operations.add(eventTypeMatch);
+            }
+
+            // Add final operations
+            operations = new java.util.ArrayList<>(operations);
+            operations.add(groupOperation);
+            operations.add(projectionOperation);
+            operations.add(sortOperation);
+            operations.add(skipOperation);
+            operations.add(limitOperation);
+
+            Aggregation aggregation = Aggregation.newAggregation(operations);
 
             AggregationResults<TopEventDto> results = mongoTemplate.aggregate(
                     aggregation, "orders", TopEventDto.class);
+
+            if (results == null) {
+                log.warn("MongoDB aggregation returned null results for simplified top events");
+                return List.of();
+            }
 
             return results.getMappedResults();
             

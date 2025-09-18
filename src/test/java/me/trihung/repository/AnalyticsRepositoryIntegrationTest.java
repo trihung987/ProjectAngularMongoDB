@@ -71,7 +71,7 @@ public class AnalyticsRepositoryIntegrationTest {
 
         // When - This should not throw any exceptions
         assertDoesNotThrow(() -> {
-            List<TopEventDto> result = customOrderRepository.findTopEvents(startDate, endDate, pageable);
+            List<TopEventDto> result = customOrderRepository.findTopEvents(startDate, endDate, null, pageable);
             assertNotNull(result);
         });
     }
@@ -89,7 +89,7 @@ public class AnalyticsRepositoryIntegrationTest {
         List<EventTypeRevenueDto> eventTypeRevenue = customOrderRepository.findEventTypeRevenue(startDate, endDate, null);
         assertNotNull(eventTypeRevenue);
         
-        List<TopEventDto> topEvents = customOrderRepository.findTopEvents(startDate, endDate, PageRequest.of(0, 5));
+        List<TopEventDto> topEvents = customOrderRepository.findTopEvents(startDate, endDate, null, PageRequest.of(0, 5));
         assertNotNull(topEvents);
     }
 

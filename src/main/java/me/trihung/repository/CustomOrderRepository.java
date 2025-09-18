@@ -16,5 +16,5 @@ public interface CustomOrderRepository {
     Page<OrderDto> findOrderDtosByOwner(User owner, Pageable pageable);
     List<RevenueDataDto> findRevenueDataByDateRange(LocalDateTime startDate, LocalDateTime endDate);
     List<EventTypeRevenueDto> findEventTypeRevenue(LocalDateTime startDate, LocalDateTime endDate, String eventType);
-    List<TopEventDto> findTopEvents(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
+    List<TopEventDto> findTopEvents(LocalDateTime startDate, LocalDateTime endDate, String eventType, Pageable pageable);
 }

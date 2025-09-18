@@ -71,7 +71,7 @@ public class AnalyticsBugFixDemoTest {
         });
         
         assertDoesNotThrow(() -> {
-            List<TopEventDto> topEvents = customOrderRepository.findTopEvents(startDate, endDate, PageRequest.of(0, 5));
+            List<TopEventDto> topEvents = customOrderRepository.findTopEvents(startDate, endDate, null, PageRequest.of(0, 5));
             // With real data, this should now return events with proper revenue calculations
             assertNotNull(topEvents);
         });

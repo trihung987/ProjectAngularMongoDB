@@ -43,12 +43,15 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     }
 
     @Override
-    public List<TopEventDto> getTopEvents(int year) {
+    public List<TopEventDto> getTopEvents(int year, String eventType) {
         LocalDateTime startDate = LocalDateTime.of(year, 1, 1, 0, 0, 0);
         LocalDateTime endDate = startDate.plusYears(1).minusNanos(1);
 
         Pageable topEventsPageable = PageRequest.of(0, TOP_EVENTS_LIMIT);
 
-        return orderRepository.findTopEvents(startDate, endDate, topEventsPageable);
+        // Nếu eventType là 'all', truyền null vào repository để bỏ qua điều kiện lọc
+        String filterEventType = "all".equalsIgnoreCase(eventType) ? null : eventType;
+
+        return orderRepository.findTopEvents(startDate, endDate, filterEventType, topEventsPageable);
     }
 }
