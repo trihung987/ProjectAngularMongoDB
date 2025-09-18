@@ -2,7 +2,6 @@ package me.trihung.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 import lombok.*;
 
@@ -12,9 +11,9 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class OrderDto {
-    private UUID id;
-    private UUID zoneId;
-    private UUID ownerId;
+    private String id;
+    private String zoneId;
+    private String ownerId;
     private Integer quantity;
     private BigDecimal totalAmount;   
     private LocalDateTime createdAt;

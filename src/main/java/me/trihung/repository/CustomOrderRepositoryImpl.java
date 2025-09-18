@@ -3,13 +3,13 @@ package me.trihung.repository;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.aggregation.AggregationOperation;
@@ -19,6 +19,9 @@ import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.SortOperation;
+import org.springframework.data.mongodb.core.aggregation.DateOperators;
+import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.LiteralOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Repository;
 
@@ -119,10 +122,7 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         // Group by year-month format
         ProjectionOperation addDateFields = Aggregation.project()
                 .andInclude("totalAmount", "createdAt", "zone")
-                .and("$dateToString")
-                .withFormat("%Y-%m")
-                .withDate("$createdAt")
-                .as("month");
+                .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month");
 
         GroupOperation groupOperation = Aggregation.group("month")
                 .sum("totalAmount").as("revenue")
@@ -134,9 +134,9 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                 .and("_id").as("month")
                 .and("revenue").as("revenue")
                 .and("orders").as("orders")
-                .and("$size", "$uniqueZoneIds").as("events");
+                .and(ArrayOperators.Size.lengthOfArray("uniqueZoneIds")).as("events");
 
-        SortOperation sortOperation = Aggregation.sort().on("month", org.springframework.data.domain.Sort.Direction.ASC);
+        SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.ASC, "month"));
 
         Aggregation aggregation = Aggregation.newAggregation(
                 matchOperation,
@@ -240,10 +240,10 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                 .and("name").as("name")
                 .and("revenue").as("revenue")
                 .and("tickets").as("tickets")
-                .and("$literal", "active").as("status"); // Simplified status logic for now
+                .and(LiteralOperators.Literal.asLiteral("active")).as("status"); // Simplified status logic for now
 
         // Sort by revenue descending
-        SortOperation sortOperation = Aggregation.sort().on("revenue", org.springframework.data.domain.Sort.Direction.DESC);
+        SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.DESC, "revenue"));
 
         // Add pagination
         AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
@@ -271,9 +271,9 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
     // Helper method to convert aggregation result to OrderDto
     private OrderDto convertToOrderDto(OrderDtoAggregate aggregate) {
         return OrderDto.builder()
-                .id(UUID.fromString(aggregate.getId()))
-                .zoneId(UUID.fromString(aggregate.getZoneId()))
-                .ownerId(UUID.fromString(aggregate.getOwnerId()))
+                .id(aggregate.getId())
+                .zoneId(aggregate.getZoneId())
+                .ownerId(aggregate.getOwnerId())
                 .quantity(aggregate.getQuantity())
                 .totalAmount(aggregate.getTotalAmount())
                 .createdAt(aggregate.getCreatedAt())
