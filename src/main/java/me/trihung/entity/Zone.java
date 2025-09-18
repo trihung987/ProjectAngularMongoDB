@@ -42,5 +42,15 @@ public class Zone extends BaseEntity {
     // Reference to Event by ID instead of embedded object
     private String eventId;
     
+    @Builder.Default
     private Integer soldTickets = 0;
+
+    // Compatibility method for JPA-style relationship management
+    public void setEvent(Event event) {
+        if (event != null) {
+            this.eventId = event.getId();
+        } else {
+            this.eventId = null;
+        }
+    }
 }

@@ -50,19 +50,21 @@ public class Event extends BaseEntity {
     @DBRef
     private Organizer organizer;
     
+    @Builder.Default
     private List<Zone> zones = new ArrayList<>();
     
+    @Builder.Default
     private EventStatus status = EventStatus.DRAFT;
 
     private BankInfo bankInfo;
         
     public void addZone(Zone zone) {
         zones.add(zone);
-        zone.setEventId(this.id);
+        zone.setEvent(this);
     }
 
     public void removeZone(Zone zone) {
         zones.remove(zone);
-        zone.setEventId(null);
+        zone.setEvent(null);
     }
 }

@@ -98,7 +98,7 @@ public class EventServiceImpl implements EventService {
 		}
 
 		if (event.getZones() != null) {
-			event.getZones().forEach(zone -> zone.setEventId(event.getId()));
+			event.getZones().forEach(zone -> zone.setEvent(event));
 		}
 
 		Event savedEvent = eventRepository.save(event);
