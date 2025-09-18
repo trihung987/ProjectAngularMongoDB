@@ -20,6 +20,8 @@ import me.trihung.mapper.OrderMapper;
 import me.trihung.mapper.ReservationMapper;
 import me.trihung.repository.ReservationRepository;
 import me.trihung.repository.ZoneRepository;
+import me.trihung.repository.EventRepository;
+import me.trihung.entity.Event;
 import me.trihung.service.OrderService;
 import me.trihung.service.ReservationService;
 import me.trihung.util.IdGenerator;
@@ -34,6 +36,8 @@ public class ReservationServiceImpl implements ReservationService {
 	private SecurityHelper securityHelper;
 	@Autowired
 	private OrderService orderService;
+	@Autowired
+	private EventRepository eventRepository;
 
 	// Thời gian giữ vé mặc định (15 phút)
 	private static final int HOLD_MINUTES = 15;
@@ -74,7 +78,17 @@ public class ReservationServiceImpl implements ReservationService {
 				reservation.getCreatedAt(), reservation.getExpiresAt(), reservation.getStatus());
 		if (!result)
 			throw BadRequestException.message("Không đủ số lượng vé trong zone này, số vé còn lại đang được giữ chỗ chờ đợi thanh toán. Vui lòng thử lại sau");
+		
 		ReservationDto reservationDto = ReservationMapper.INSTANCE.toDto(reservation);
+		
+		// Fetch and set the event name
+		if (zone.getEventId() != null) {
+			Event event = eventRepository.findById(zone.getEventId()).orElse(null);
+			if (event != null) {
+				reservationDto.setNameEvent(event.getEventName());
+			}
+		}
+		
 		return reservationDto;
 	}
 //	 @Param("zoneId") UUID zoneId,
@@ -88,7 +102,19 @@ public class ReservationServiceImpl implements ReservationService {
 	public ReservationDto getReservationById(String reservationId) {
 	    Reservation reservation = reservationRepository.findById(reservationId)
 	            .orElseThrow(() -> BadRequestException.message("Không tìm thấy giữ chỗ"));
-	    return ReservationMapper.INSTANCE.toDto(reservation);
+	    
+	    ReservationDto reservationDto = ReservationMapper.INSTANCE.toDto(reservation);
+	    
+	    // Fetch and set the event name
+	    Zone zone = reservation.getZone();
+	    if (zone != null && zone.getEventId() != null) {
+	        Event event = eventRepository.findById(zone.getEventId()).orElse(null);
+	        if (event != null) {
+	            reservationDto.setNameEvent(event.getEventName());
+	        }
+	    }
+	    
+	    return reservationDto;
 	}
 
 
