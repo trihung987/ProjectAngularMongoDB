@@ -61,11 +61,14 @@ public class SecurityConfig {
 	@Bean
 	@Order(1)
 	public SecurityFilterChain publicApiFilterChain(HttpSecurity http) throws Exception {
-		http.securityMatcher(publicApi).authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+		http.securityMatcher(publicApi)
+				.authorizeHttpRequests(auth -> 
+					auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+						.anyRequest().permitAll())
 				.csrf(csrf -> csrf.disable())
 		        .cors(cors -> cors.configurationSource(configurationSource))
-				.httpBasic(httpBasic -> httpBasic.disable()).oauth2ResourceServer(oauth2 -> oauth2.disable()) // disable
-																												// jwt
+				.httpBasic(httpBasic -> httpBasic.disable())
+				.oauth2ResourceServer(oauth2 -> oauth2.disable()) // disable jwt
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
 		return http.build();
@@ -77,6 +80,7 @@ public class SecurityConfig {
 		http.securityMatcher("/api/v1/**")
 				.authorizeHttpRequests(auth ->
 						auth
+						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.anyRequest().permitAll())
 				.csrf(csrf -> csrf.disable())
 				.cors(cors -> cors.configurationSource(configurationSource))
