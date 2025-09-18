@@ -19,6 +19,7 @@ import me.trihung.dto.EventPageResponse;
 import me.trihung.dto.request.EventRequest;
 import me.trihung.entity.Event;
 import me.trihung.entity.User;
+import me.trihung.entity.Zone;
 import me.trihung.enums.EventStatus;
 import me.trihung.exception.BadRequestException;
 import me.trihung.exception.UnauthorizedException;
@@ -261,6 +262,13 @@ public class EventServiceImpl implements EventService {
 		Event event = eventRepository.findById(id)
 				.orElseThrow(() -> BadRequestException.message("Không tìm thấy event với id: " + id));
 		validateOwner(event);
+		
+		// Delete associated zones first
+		List<Zone> eventZones = zoneRepository.findByEventId(id);
+		if (!eventZones.isEmpty()) {
+			zoneRepository.deleteAll(eventZones);
+		}
+		
 		eventRepository.deleteById(id);
 	}
 	
