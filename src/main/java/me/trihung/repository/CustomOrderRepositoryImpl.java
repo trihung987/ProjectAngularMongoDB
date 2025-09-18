@@ -23,6 +23,7 @@ import org.springframework.data.mongodb.core.aggregation.SortOperation;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
 import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
 import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
+import org.springframework.data.mongodb.core.aggregation.ConvertOperators;
 import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.LiteralOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -190,12 +191,17 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             AggregationOperation unwindZone = Aggregation.unwind("zoneData");
 
-            // Project necessary fields and convert date to month format
-            ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "totalAmount")
+            // Use addFields to convert string totalAmount to double before aggregation
+            AggregationOperation addFieldsOperation = Aggregation.addFields()
+                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
+                    .build();
+
+            // Project necessary fields with numeric amount
+            ProjectionOperation projectFields = Aggregation.project()
+                    .andInclude("createdAt")
                     .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month")
                     .and("zoneData.eventId").as("eventId")
-                    .and("totalAmount").as("amount");
+                    .and("numericAmount").as("amount");
 
             GroupOperation groupOperation = Aggregation.group("month")
                     .sum("amount").as("revenue")
@@ -215,7 +221,8 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     matchOperation,
                     lookupZone,
                     unwindZone,
-                    addFields,
+                    addFieldsOperation,
+                    projectFields,
                     groupOperation,
                     projectionOperation,
                     sortOperation
@@ -245,10 +252,16 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     Criteria.where("createdAt").gte(startDate).lte(endDate)
             );
 
-            // Project necessary fields
+            // Add field to convert string totalAmount to double  
+            AggregationOperation addFieldsStringToNumber = Aggregation.addFields()
+                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
+                    .build();
+
+            // Project necessary fields with numeric amount
             ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "quantity", "totalAmount")
-                    .and("zone.$id").as("zoneId");
+                    .andInclude("createdAt", "quantity")
+                    .and("zone.$id").as("zoneId")
+                    .and("numericAmount").as("totalAmount");
 
             // Lookup to join with zones
             LookupOperation lookupZone = LookupOperation.newLookup()
@@ -290,6 +303,7 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             // Build aggregation pipeline dynamically
             List<AggregationOperation> operations = Arrays.asList(
                     matchOperation,
+                    addFieldsStringToNumber,
                     addFields,
                     lookupZone,
                     unwindZone,
@@ -334,10 +348,16 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     Criteria.where("createdAt").gte(startDate).lte(endDate)
             );
 
-            // Project necessary fields
+            // Add field to convert string totalAmount to double
+            AggregationOperation addFieldsStringToNumber = Aggregation.addFields()
+                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
+                    .build();
+
+            // Project necessary fields with numeric amount
             ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "quantity", "totalAmount")
-                    .and("zone.$id").as("zoneId");
+                    .andInclude("createdAt", "quantity")
+                    .and("zone.$id").as("zoneId")
+                    .and("numericAmount").as("totalAmount");
 
             // Lookup operations to join with zones and events
             LookupOperation lookupZone = LookupOperation.newLookup()
@@ -384,6 +404,7 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             Aggregation aggregation = Aggregation.newAggregation(
                     matchOperation,
+                    addFieldsStringToNumber,
                     addFields,
                     lookupZone,
                     unwindZone,
@@ -428,10 +449,16 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     Criteria.where("createdAt").gte(startDate).lte(endDate)
             );
 
-            // Project necessary fields
+            // Add field to convert string totalAmount to double
+            AggregationOperation addFieldsStringToNumber = Aggregation.addFields()
+                    .addField("numericAmount").withValue(ConvertOperators.ToDouble.toDouble("$totalAmount"))
+                    .build();
+
+            // Project necessary fields with numeric amount
             ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "quantity", "totalAmount")
-                    .and("zone.$id").as("zoneId");
+                    .andInclude("createdAt", "quantity")
+                    .and("zone.$id").as("zoneId")
+                    .and("numericAmount").as("totalAmount");
 
             // Lookup operations to join with zones and events
             LookupOperation lookupZone = LookupOperation.newLookup()
@@ -472,6 +499,7 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
 
             Aggregation aggregation = Aggregation.newAggregation(
                     matchOperation,
+                    addFieldsStringToNumber,
                     addFields,
                     lookupZone,
                     unwindZone,
