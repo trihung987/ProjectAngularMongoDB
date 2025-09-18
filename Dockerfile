@@ -3,4 +3,5 @@ VOLUME /tmp
 COPY target/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "/app.jar"]
 
-#cần mvn clean package trước rồi mới chạy docker build( docker-compose up --build )
+# Build the application first with: mvn clean package
+# Then run with Docker Compose: docker-compose up --build

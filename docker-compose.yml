@@ -1,24 +1,39 @@
-version: '3.8'
-
 services:
- angular-postgres:
-    image: postgres:15-alpine
-    container_name: angular-postgres
+  angular-mongodb:
+    image: mongo:7-jammy
+    container_name: angular-mongodb
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: angulartts-db
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      MONGO_INITDB_DATABASE: angulartts-db
     ports:
-      - "5433:5432"
+      - "27017:27017"
     volumes:
-      - angular_postgres_data:/var/lib/postgresql/data
+      - angular_mongodb_data:/data/db
     healthcheck:
-        test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-        interval: 10s
-        timeout: 5s
-        retries: 5
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  angular-app:
+    build: .
+    container_name: angular-app
+    restart: always
+    environment:
+      MONGO_HOST: angular-mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: angulartts-db
+      MONGO_USERNAME: admin
+      MONGO_PASSWORD: 123456
+    ports:
+      - "8080:8080"
+    depends_on:
+      angular-mongodb:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/uploads
 
 volumes:
-  angular_postgres_data:
+  angular_mongodb_data:

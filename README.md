@@ -1,5 +1,65 @@
 # ProjectAngularMongoDB
 
+A Spring Boot application with Angular frontend using MongoDB as the database.
+
+## Prerequisites
+
+- Java 17+
+- Maven 3.6+
+- Docker and Docker Compose (for containerized setup)
+- MongoDB (for local development without Docker)
+
+## Quick Start with Docker
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd ProjectAngularMongoDB
+   ```
+
+2. **Build the application**
+   ```bash
+   mvn clean package
+   ```
+
+3. **Run with Docker Compose**
+   ```bash
+   docker-compose up --build
+   ```
+
+This will start:
+- MongoDB database on port 27017
+- Spring Boot application on port 8080
+
+## Local Development
+
+1. **Start MongoDB locally** (or use Docker for MongoDB only)
+   ```bash
+   # Using Docker for MongoDB only
+   docker run -d -p 27017:27017 --name mongodb \
+     -e MONGO_INITDB_ROOT_USERNAME=admin \
+     -e MONGO_INITDB_ROOT_PASSWORD=123456 \
+     mongo:7-jammy
+   ```
+
+2. **Configure environment variables** (copy from .env.example)
+   ```bash
+   cp .env.example .env
+   # Edit .env file as needed
+   ```
+
+3. **Run the application**
+   ```bash
+   mvn spring-boot:run
+   ```
+
+## Database Migration
+
+This project has been migrated from PostgreSQL to MongoDB:
+- All entities use MongoDB annotations (@Document, @DBRef)
+- Repositories extend MongoRepository
+- Docker Compose now uses MongoDB instead of PostgreSQL
+
 ## JPA to MongoDB Refactoring Complete
 
 This project has been successfully refactored from JPA (Java Persistence API) to MongoDB while maintaining **100% backward compatibility** with the frontend by preserving all DTOs unchanged.
