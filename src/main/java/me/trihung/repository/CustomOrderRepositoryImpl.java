@@ -2,6 +2,7 @@ package me.trihung.repository;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -19,8 +20,10 @@ import org.springframework.data.mongodb.core.aggregation.MatchOperation;
 import org.springframework.data.mongodb.core.aggregation.ProjectionOperation;
 import org.springframework.data.mongodb.core.aggregation.GroupOperation;
 import org.springframework.data.mongodb.core.aggregation.SortOperation;
-import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.ArrayOperators;
+import org.springframework.data.mongodb.core.aggregation.ComparisonOperators;
+import org.springframework.data.mongodb.core.aggregation.ConditionalOperators;
+import org.springframework.data.mongodb.core.aggregation.DateOperators;
 import org.springframework.data.mongodb.core.aggregation.LiteralOperators;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.stereotype.Repository;
@@ -29,6 +32,7 @@ import me.trihung.dto.EventTypeRevenueDto;
 import me.trihung.dto.OrderDto;
 import me.trihung.dto.RevenueDataDto;
 import me.trihung.dto.TopEventDto;
+import me.trihung.dto.TopEventDtoDetailed;
 import me.trihung.entity.Order;
 import me.trihung.entity.User;
 
@@ -177,29 +181,40 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     Criteria.where("createdAt").gte(startDate).lte(endDate)
             );
 
-            // Convert totalAmount to double for aggregation (handles both String and BigDecimal cases)
+            // Lookup zones to get eventId
+            LookupOperation lookupZone = LookupOperation.newLookup()
+                    .from("zones")
+                    .localField("zone.$id")
+                    .foreignField("_id")
+                    .as("zoneData");
+
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
+
+            // Project necessary fields and convert date to month format
             ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "zone")
+                    .andInclude("createdAt", "totalAmount")
                     .and(DateOperators.DateToString.dateOf("createdAt").toString("%Y-%m")).as("month")
-                    .and("zone.$id").as("zoneId")
-                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
+                    .and("zoneData.eventId").as("eventId")
+                    .and("totalAmount").as("amount");
 
             GroupOperation groupOperation = Aggregation.group("month")
                     .sum("amount").as("revenue")
                     .count().as("orders")
-                    .addToSet("zoneId").as("uniqueZoneIds");
+                    .addToSet("eventId").as("uniqueEventIds"); // Count unique events, not zones
 
             // Project to final format
             ProjectionOperation projectionOperation = Aggregation.project()
                     .and("_id").as("month")
                     .and("revenue").as("revenue")
                     .and("orders").as("orders")
-                    .and(ArrayOperators.Size.lengthOfArray("uniqueZoneIds")).as("events");
+                    .and(ArrayOperators.Size.lengthOfArray("uniqueEventIds")).as("events");
 
             SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.ASC, "month"));
 
             Aggregation aggregation = Aggregation.newAggregation(
                     matchOperation,
+                    lookupZone,
+                    unwindZone,
                     addFields,
                     groupOperation,
                     projectionOperation,
@@ -225,39 +240,46 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         log.debug("Finding event type revenue from {} to {}, eventType: {}", startDate, endDate, eventType);
         
         try {
-            // First add a projection to properly handle DBRef and convert totalAmount
-            ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "quantity")
-                    .and("zone.$id").as("zoneId")
-                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
+            // Match orders by date range first
+            MatchOperation matchOperation = Aggregation.match(
+                    Criteria.where("createdAt").gte(startDate).lte(endDate)
+            );
 
-            // Lookup to join with zones and events
+            // Project necessary fields
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "quantity", "totalAmount")
+                    .and("zone.$id").as("zoneId");
+
+            // Lookup to join with zones
             LookupOperation lookupZone = LookupOperation.newLookup()
                     .from("zones")
                     .localField("zoneId")
                     .foreignField("_id")
                     .as("zoneData");
 
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
+
+            // Lookup to join with events
             LookupOperation lookupEvent = LookupOperation.newLookup()
                     .from("events")
                     .localField("zoneData.eventId")
                     .foreignField("_id")
                     .as("eventData");
 
-            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
             AggregationOperation unwindEvent = Aggregation.unwind("eventData");
 
-            // Match operation for date range and optional event type
-            Criteria criteria = Criteria.where("createdAt").gte(startDate).lte(endDate);
+            // Apply event type filter if specified
+            MatchOperation eventTypeMatch = null;
             if (eventType != null && !eventType.isEmpty()) {
-                criteria = criteria.and("eventData.eventCategory").is(eventType);
+                eventTypeMatch = Aggregation.match(
+                        Criteria.where("eventData.eventCategory").is(eventType)
+                );
             }
-            MatchOperation matchOperation = Aggregation.match(criteria);
 
             // Group by event category
             GroupOperation groupOperation = Aggregation.group("eventData.eventCategory")
                     .sum("quantity").as("value")
-                    .sum("amount").as("revenue");
+                    .sum("totalAmount").as("revenue");
 
             // Project to match EventTypeRevenueDto structure
             ProjectionOperation projectionOperation = Aggregation.project()
@@ -265,16 +287,28 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     .and("value").as("value")
                     .and("revenue").as("revenue");
 
-            Aggregation aggregation = Aggregation.newAggregation(
+            // Build aggregation pipeline dynamically
+            List<AggregationOperation> operations = Arrays.asList(
+                    matchOperation,
                     addFields,
                     lookupZone,
                     unwindZone,
                     lookupEvent,
-                    unwindEvent,
-                    matchOperation,
-                    groupOperation,
-                    projectionOperation
+                    unwindEvent
             );
+
+            // Add event type filter if needed
+            if (eventTypeMatch != null) {
+                operations = new java.util.ArrayList<>(operations);
+                operations.add(eventTypeMatch);
+            }
+
+            // Add final operations
+            operations = new java.util.ArrayList<>(operations);
+            operations.add(groupOperation);
+            operations.add(projectionOperation);
+
+            Aggregation aggregation = Aggregation.newAggregation(operations);
 
             AggregationResults<EventTypeRevenueDto> results = mongoTemplate.aggregate(
                     aggregation, "orders", EventTypeRevenueDto.class);
@@ -295,18 +329,24 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
         log.debug("Finding top events from {} to {}, limit: {}", startDate, endDate, pageable.getPageSize());
         
         try {
-            // First add a projection to properly handle DBRef and convert totalAmount
-            ProjectionOperation addFields = Aggregation.project()
-                    .andInclude("createdAt", "quantity")
-                    .and("zone.$id").as("zoneId")
-                    .and("totalAmount").as("amount"); // Keep as is, MongoDB aggregation will handle conversion
+            // Match orders by date range
+            MatchOperation matchOperation = Aggregation.match(
+                    Criteria.where("createdAt").gte(startDate).lte(endDate)
+            );
 
-            // Lookup operations
+            // Project necessary fields
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "quantity", "totalAmount")
+                    .and("zone.$id").as("zoneId");
+
+            // Lookup operations to join with zones and events
             LookupOperation lookupZone = LookupOperation.newLookup()
                     .from("zones")
                     .localField("zoneId")
                     .foreignField("_id")
                     .as("zoneData");
+
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
 
             LookupOperation lookupEvent = LookupOperation.newLookup()
                     .from("events")
@@ -314,43 +354,129 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
                     .foreignField("_id")
                     .as("eventData");
 
-            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
             AggregationOperation unwindEvent = Aggregation.unwind("eventData");
 
-            // Match operation for date range
-            MatchOperation matchOperation = Aggregation.match(
-                    Criteria.where("createdAt").gte(startDate).lte(endDate)
-            );
-
-            // Group by event
+            // Group by event to calculate totals
             GroupOperation groupOperation = Aggregation.group("eventData._id")
                     .first("eventData.eventName").as("name")
-                    .sum("amount").as("revenue")
+                    .sum("totalAmount").as("revenue")
                     .sum("quantity").as("tickets")
                     .first("eventData.startDate").as("startDate")
-                    .first("eventData.startTime").as("startTime");
+                    .first("eventData.startTime").as("startTime")
+                    .first("eventData.endDate").as("endDate")
+                    .first("eventData.endTime").as("endTime");
 
-            // Project to add status logic
+            // Project with improved status calculation
             ProjectionOperation projectionOperation = Aggregation.project()
                     .and("name").as("name")
                     .and("revenue").as("revenue")
                     .and("tickets").as("tickets")
-                    .and(LiteralOperators.Literal.asLiteral("active")).as("status"); // Simplified status logic for now
+                    .and("startDate").as("startDate")
+                    .and("endDate").as("endDate")
+                    .and(LiteralOperators.Literal.asLiteral("active")).as("status"); // Use simple status for now
 
             // Sort by revenue descending
             SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.DESC, "revenue"));
 
             // Add pagination
-            AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
             AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
+            AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
 
             Aggregation aggregation = Aggregation.newAggregation(
+                    matchOperation,
                     addFields,
                     lookupZone,
                     unwindZone,
                     lookupEvent,
                     unwindEvent,
+                    groupOperation,
+                    projectionOperation,
+                    sortOperation,
+                    skipOperation,
+                    limitOperation
+            );
+
+            AggregationResults<TopEventDtoDetailed> results = mongoTemplate.aggregate(
+                    aggregation, "orders", TopEventDtoDetailed.class);
+
+            List<TopEventDtoDetailed> detailedList = results.getMappedResults();
+            
+            // Calculate proper status for each event and convert to basic TopEventDto
+            List<TopEventDto> resultList = detailedList.stream()
+                    .peek(TopEventDtoDetailed::calculateStatus)
+                    .map(TopEventDtoDetailed::toBasic)
+                    .collect(Collectors.toList());
+            
+            log.debug("Found {} top events", resultList.size());
+            
+            return resultList;
+            
+        } catch (Exception e) {
+            log.error("Error in findTopEvents: {}", e.getMessage(), e);
+            // Fallback to simpler aggregation if the complex one fails
+            return findTopEventsSimple(startDate, endDate, pageable);
+        }
+    }
+    
+    // Fallback method with simpler status logic
+    private List<TopEventDto> findTopEventsSimple(LocalDateTime startDate, LocalDateTime endDate, Pageable pageable) {
+        try {
+            log.debug("Using simplified top events query as fallback");
+            
+            // Match orders by date range
+            MatchOperation matchOperation = Aggregation.match(
+                    Criteria.where("createdAt").gte(startDate).lte(endDate)
+            );
+
+            // Project necessary fields
+            ProjectionOperation addFields = Aggregation.project()
+                    .andInclude("createdAt", "quantity", "totalAmount")
+                    .and("zone.$id").as("zoneId");
+
+            // Lookup operations to join with zones and events
+            LookupOperation lookupZone = LookupOperation.newLookup()
+                    .from("zones")
+                    .localField("zoneId")
+                    .foreignField("_id")
+                    .as("zoneData");
+
+            AggregationOperation unwindZone = Aggregation.unwind("zoneData");
+
+            LookupOperation lookupEvent = LookupOperation.newLookup()
+                    .from("events")
+                    .localField("zoneData.eventId")
+                    .foreignField("_id")
+                    .as("eventData");
+
+            AggregationOperation unwindEvent = Aggregation.unwind("eventData");
+
+            // Group by event to calculate totals
+            GroupOperation groupOperation = Aggregation.group("eventData._id")
+                    .first("eventData.eventName").as("name")
+                    .sum("totalAmount").as("revenue")
+                    .sum("quantity").as("tickets");
+
+            // Project with simple status
+            ProjectionOperation projectionOperation = Aggregation.project()
+                    .and("name").as("name")
+                    .and("revenue").as("revenue")
+                    .and("tickets").as("tickets")
+                    .and(LiteralOperators.Literal.asLiteral("active")).as("status");
+
+            // Sort by revenue descending
+            SortOperation sortOperation = Aggregation.sort(Sort.by(Sort.Direction.DESC, "revenue"));
+
+            // Add pagination
+            AggregationOperation skipOperation = Aggregation.skip((long) pageable.getOffset());
+            AggregationOperation limitOperation = Aggregation.limit(pageable.getPageSize());
+
+            Aggregation aggregation = Aggregation.newAggregation(
                     matchOperation,
+                    addFields,
+                    lookupZone,
+                    unwindZone,
+                    lookupEvent,
+                    unwindEvent,
                     groupOperation,
                     projectionOperation,
                     sortOperation,
@@ -361,13 +487,10 @@ public class CustomOrderRepositoryImpl implements CustomOrderRepository {
             AggregationResults<TopEventDto> results = mongoTemplate.aggregate(
                     aggregation, "orders", TopEventDto.class);
 
-            List<TopEventDto> resultList = results.getMappedResults();
-            log.debug("Found {} top events", resultList.size());
-            
-            return resultList;
+            return results.getMappedResults();
             
         } catch (Exception e) {
-            log.error("Error in findTopEvents: {}", e.getMessage(), e);
+            log.error("Even simplified top events query failed: {}", e.getMessage(), e);
             return List.of();
         }
     }
