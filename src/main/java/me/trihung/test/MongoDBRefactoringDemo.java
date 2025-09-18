@@ -117,4 +117,48 @@ public class MongoDBRefactoringDemo {
         // But when converted to DTO, UUIDs are maintained for frontend
         System.out.println("Conversion to DTOs maintains UUID compatibility for frontend");
     }
+
+    /**
+     * Demonstrates that the new setEvent method works correctly for JPA to MongoDB migration compatibility
+     */
+    public void demonstrateZoneEventRelationship() {
+        System.out.println("\n=== Testing Zone.setEvent() method ===");
+        
+        // Create test entities
+        Event event = Event.builder()
+                .id("507f1f77bcf86cd799439020")
+                .eventName("Test Concert")
+                .build();
+                
+        Zone zone = Zone.builder()
+                .id("507f1f77bcf86cd799439021")
+                .name("VIP Section")
+                .build();
+        
+        // Test setEvent method - should set eventId
+        zone.setEvent(event);
+        System.out.println("Zone eventId after setEvent: " + zone.getEventId());
+        System.out.println("Expected: " + event.getId());
+        assert event.getId().equals(zone.getEventId()) : "setEvent should set eventId correctly";
+        
+        // Test setEvent with null - should clear eventId
+        zone.setEvent(null);
+        System.out.println("Zone eventId after setEvent(null): " + zone.getEventId());
+        System.out.println("Expected: null");
+        assert zone.getEventId() == null : "setEvent(null) should clear eventId";
+        
+        // Test Event.addZone method - should use setEvent internally
+        event.addZone(zone);
+        System.out.println("Zone eventId after event.addZone: " + zone.getEventId());
+        System.out.println("Expected: " + event.getId());
+        assert event.getId().equals(zone.getEventId()) : "addZone should set eventId correctly";
+        
+        // Test Event.removeZone method - should use setEvent(null) internally
+        event.removeZone(zone);
+        System.out.println("Zone eventId after event.removeZone: " + zone.getEventId());
+        System.out.println("Expected: null");
+        assert zone.getEventId() == null : "removeZone should clear eventId";
+        
+        System.out.println("✅ All Zone-Event relationship tests passed!");
+    }
 }
