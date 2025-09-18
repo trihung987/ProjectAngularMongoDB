@@ -6,12 +6,11 @@ import me.trihung.enums.EventStatus;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
-import java.util.UUID;
 
 @Repository
-public interface EventRepository extends JpaRepository<Event, UUID> {
+public interface EventRepository extends MongoRepository<Event, String> {
 	Page<Event> findByStatus(EventStatus status, Pageable pageable);
 
     Page<Event> findByEventNameContainingIgnoreCase(String search, Pageable pageable);
@@ -25,5 +24,4 @@ public interface EventRepository extends JpaRepository<Event, UUID> {
     Page<Event> findByOwnerAndEventNameContainingIgnoreCase(User owner, String search, Pageable pageable);
 
     Page<Event> findByOwnerAndStatusAndEventNameContainingIgnoreCase(User owner, EventStatus status, String search, Pageable pageable);
-
 }

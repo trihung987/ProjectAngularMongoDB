@@ -17,7 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Mapper(componentModel = "spring", uses = {ZoneMapper.class})
-public interface EventMapper {
+public interface EventMapper extends BaseMapper {
 
     default LocalTime map(String time) {
         if (time == null || time.isBlank()) {
@@ -43,7 +43,8 @@ public interface EventMapper {
  
     // MapStruct sẽ tự động sử dụng ZoneMapper cho trường 'zones'
     @Mapping(target = "eventStatus", source = "status")
-    @Mapping(target = "ownerId", source = "owner.id")
+    @Mapping(target = "id", source = "id", qualifiedByName = "stringToUuid")
+    @Mapping(target = "ownerId", source = "owner.id", qualifiedByName = "stringToUuid")
     EventDto toEventResponseDto(Event event);
  
     List<EventDto> toEventResponseDtoList(List<Event> events);
@@ -53,6 +54,7 @@ public interface EventMapper {
     @Mapping(target = "eventImage", ignore = true)
     @Mapping(target = "eventBanner", ignore = true)
     @Mapping(target = "organizer.logo", ignore = true)
+    @Mapping(target = "id", source = "id", qualifiedByName = "uuidToString")
     void updateEventFromRequest(EventRequest requestDto, @MappingTarget Event event);
 
     @AfterMapping
